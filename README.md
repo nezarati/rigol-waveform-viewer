@@ -27,13 +27,14 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
 ***
 
 ### 📈 Waveform Display & Interaction
-* **Interactive Panning & Zooming**:
-    * **Pan (Horizontal)**: `Shift` + `Mouse Wheel`
-    * **Zoom Time (X-Axis)**: `Ctrl` + `Mouse Wheel`
-    * **Zoom Voltage (Y-Axis)**: `Ctrl` + `Shift` + `Mouse Wheel`
-    * **Area Zoom**: Click and drag to select and zoom into a specific region.
+* **Modern Chart Interaction (TradingView Style)**:
+    * **Pan**: Click and drag on the chart to pan freely in any direction (up, down, left, and right).
+    * **Axis-Specific Zoom**: Hover your mouse over the time (bottom) or voltage (left/right) axes and use the **Mouse Wheel** to zoom that axis independently.
+    * **Area Zoom**: Press the `Z` key to activate zoom mode for one use. Then, click and drag to select and zoom into a specific region.
 * **View Controls**:
-    * **Reset View**: Double-click the plot or press `F` to fit the entire waveform into view.
+    * **Fit & Reset View**: A two-stage system for quickly adjusting the view.
+        * Press `F` (1st press) to **Fit Y-Axis** to the data currently in view.
+        * Press `F` (2nd press) or **Double-Click** the plot to perform a **Full Reset** (fits all data).
     * **Snap to Scales**: Optionally snap zoom levels to standard oscilloscope time/voltage scales.
     * **Relative Time**: Set the start of the current view as $t=0$ for relative measurements.
 * **Channel Management**:
@@ -97,12 +98,13 @@ If your oscilloscope model is not listed, it is still likely to work. Please ope
 | Action | Shortcut |
 | :--- | :--- |
 | **View Control** | |
-| Fit Waveform to View / Reset | `F` Key or `Double-Click` |
-| Zoom to Area | `Mouse Drag` |
-| Pan Horizontally | `Shift` + `Mouse Wheel` |
-| Zoom Time (Horizontal) | `Ctrl` + `Mouse Wheel` |
-| Zoom Voltage (Vertical) | `Ctrl` + `Shift` + `Mouse Wheel` |
+| Fit Y-Axis to View (1st press) | `F` Key |
+| Full Reset View (2nd press) | `F` Key |
+| Full Reset View | `Double-Click` |
+| Pan Chart (X & Y) | `Mouse Drag` |
+| Zoom on Axis (X or Y) | `Mouse Wheel` over axis |
 | **Actions** | |
+| Toggle Area Zoom Mode (1-time use) | `Z` Key |
 | Copy to Clipboard | `Ctrl` + `C` |
 | Add Text Annotation | `T` Key |
 | Create Area Annotation | `Shift` + `Mouse Drag` |
