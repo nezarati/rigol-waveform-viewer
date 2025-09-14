@@ -29,7 +29,7 @@
         .tool-button:active { transform: translateY(1px); }
         .tool-button.active { background: #0078d7; }
         .display-area { flex: 1; position: relative; min-height: 0; }
-        .waveform-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #1e1e1e; border-radius: 4px; overflow: hidden; cursor: crosshair; }
+        .waveform-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #1e1e1e; border-radius: 4px; overflow: hidden; cursor: grab; }
         canvas { width: 100%; height: 100%; display: block; }
         .status-bar { height: 28px; background: #0078d7; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 14px; flex-shrink: 0; margin-top: 12px; }
         .window-title { font-size: 13px; font-weight: 500; color: #cccccc; margin-right: 20px; }
@@ -178,15 +178,15 @@
             <p id="aboutDate"></p>
             <h3>Shortcuts</h3>
             <ul class="shortcut-list">
-                <li><span>Fit waveform to view</span><code>F Key</code></li>
+                <li><span>Fit Y-Axis to View (1st press)</span><code>F Key</code></li>
+                <li><span>Full Reset View (2nd press)</span><code>F Key</code></li>
+                <li><span>Full Reset View</span><code>Double Click</code></li>
+                <li><span>Toggle Area Zoom Mode (1-time use)</span><code>Z Key</code></li>
+                <li><span>Pan Chart (X & Y)</span><code>Mouse Drag</code></li>
+                <li><span>Zoom (X/Y)</span><code>Scroll over Axes</code></li>
                 <li><span>Copy to Clipboard (PNG)</span><code>Ctrl + C</code></li>
                 <li><span>Add Text Annotation</span><code>T Key</code></li>
-                <li><span>Zoom to area</span><code>Mouse Drag</code></li>
                 <li><span>Measure / Annotate area</span><code>Shift + Drag</code></li>
-                <li><span>Pan horizontally</span><code>Shift + Scroll</code></li>
-                <li><span>Zoom (Time)</span><code>Ctrl + Scroll</code></li>
-                <li><span>Zoom (Voltage)</span><code>Ctrl + Shift + Scroll</code></li>
-                <li><span>Reset view</span><code>Double Click</code></li>
                 <li><span>Delete Annotation</span><code>Click to Select + Delete Key</code></li>
             </ul>
         </div>
@@ -259,7 +259,8 @@
         let isDraggingFile = false;
         
         // Interaction state (applies to active tab)
-        let isDragging = false, isShiftPressed = false;
+        let isDragging = false, isShiftPressed = false, isPanning = false, zoomModeEnabled = false, isYFitted = false;
+        let panStart = { x: 0, y: 0, viewStart: 0, viewEnd: 0, vMin: 0, vMax: 0 };
         let dragStart = { x: 0, y: 0 }, dragEnd = { x: 0, y: 0 };
         let activeInteraction = { type: null, index: -1, handle: null };
         let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false };
@@ -333,13 +334,54 @@
                 ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
                 
                 if (displayOptions.showStats) drawStats(plotArea, state);
-                if (isDragging) { if (isShiftPressed) drawMeasurementBox(plotArea, state.view); else drawDragRectangle(); }
+                if (isDragging) { if (isShiftPressed) drawMeasurementBox(plotArea, state.view); else if (zoomModeEnabled) drawDragRectangle(); }
             });
         }
         
         function formatEng(v, u, p = 3, includeUnit = true){ if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); const s = v < 0 ? '-' : ''; v = Math.abs(v); if (v === 0) return `0 ${includeUnit && u ? u : ''}`.trim(); const k = ['p', 'n', 'µ', 'm', '', 'k', 'M', 'G', 'T']; const i = Math.floor((Math.log10(v) || 0) / 3); const d = v / 10**(i * 3); return (s + d.toPrecision(p) + (k[i + 4] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); }
         function drawGrid(p){ctx.strokeStyle='#333';ctx.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;ctx.beginPath();ctx.moveTo(x,p.y);ctx.lineTo(x,p.y+p.height);ctx.stroke()}for(let i=0;i<=Y_DIVS;i++){const y=p.y+i/Y_DIVS*p.height;ctx.beginPath();ctx.moveTo(p.x,y);ctx.lineTo(p.x+p.width,y);ctx.stroke()}}
-        function drawAxisLabels(p, view){ctx.fillStyle='#a0a0a0';ctx.font='14px Segoe UI'; if (!view) { ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('V', p.x-10, p.y + p.height/2); ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText('s', p.x + p.width/2, p.y+p.height+10); return; } const vR=view.vMax-view.vMin;if(vR>0){ctx.textAlign='right';ctx.textBaseline='middle';for(let i=0;i<=Y_DIVS;i++){const y=p.y+i/Y_DIVS*p.height;const v=view.vMax-i/Y_DIVS*vR;ctx.fillText(formatEng(v*VOLTS_PER_BYTE,'V', 3, false),p.x-10,y)}}const tS=(view.endIndex-view.startIndex);if(tS>0){const tStart=view.startIndex*TIME_PER_POINT;const tSpan=tS*TIME_PER_POINT;ctx.textAlign='center';ctx.textBaseline='top';for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;const timeVal = displayOptions.relativeTime ? (i/X_DIVS*tSpan) : (tStart+i/X_DIVS*tSpan);ctx.fillText(formatEng(timeVal,'s', 3, false),x,p.y+p.height+10)}}}
+        
+        function drawAxisLabels(p, view){
+            ctx.fillStyle='#a0a0a0'; 
+            ctx.font='14px Segoe UI'; 
+            if (view) { 
+                const vR=view.vMax-view.vMin;
+                if(vR>0){
+                    ctx.textAlign='right';
+                    ctx.textBaseline='middle';
+                    for(let i=0;i<=Y_DIVS;i++){
+                        const y=p.y+i/Y_DIVS*p.height;
+                        const v=view.vMax-i/Y_DIVS*vR;
+                        ctx.fillText(formatEng(v*VOLTS_PER_BYTE,'V', 3, false),p.x-10,y);
+                    }
+                }
+                const tS=(view.endIndex-view.startIndex);
+                if(tS>0){
+                    const tStart=view.startIndex*TIME_PER_POINT;
+                    const tSpan=tS*TIME_PER_POINT;
+                    ctx.textAlign='center';
+                    ctx.textBaseline='top';
+                    for(let i=0;i<=X_DIVS;i++){
+                        const x=p.x+i/X_DIVS*p.width;
+                        const timeVal = displayOptions.relativeTime ? (i/X_DIVS*tSpan) : (tStart+i/X_DIVS*tSpan);
+                        ctx.fillText(formatEng(timeVal,'s', 3, false),x,p.y+p.height+10);
+                    }
+                }
+            }
+            // Axis Unit Labels
+            ctx.font = '16px Segoe UI';
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.translate(p.x - 60, p.y + p.height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Voltage (V)', 0, 0);
+            ctx.restore();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+        }
+
         function drawWaveform(d,c,p,view){ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.beginPath();const pts=view.endIndex-view.startIndex;const vR=view.vMax-view.vMin;if(vR===0)return;if(pts>p.width*2){const dec=decimate(d,view.startIndex,view.endIndex,p.width);for(let i=0;i<dec.length;i++){const{min,max}=dec[i];const x=p.x+i;const y_min=p.y+p.height-((min-view.vMin)/vR)*p.height;const y_max=p.y+p.height-((max-view.vMin)/vR)*p.height;if(i===0)ctx.moveTo(x,y_min);ctx.lineTo(x,y_min);ctx.lineTo(x,y_max)}}else if(pts>1){for(let i=0;i<pts;i++){const v=d[Math.floor(view.startIndex)+i]-127;const x=p.x+i/(pts-1)*p.width;const y=p.y+p.height-((v-view.vMin)/vR)*p.height;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}}ctx.stroke();}
         function decimate(d, s, e, w){const dec=[];const step=(e-s)/w;for(let i=0;i<w;i++){const start=Math.floor(s+i*step),end=Math.floor(s+(i+1)*step);let min=128,max=-128;for(let j=start;j<end;j++){if(d[j]!==undefined){const v=d[j]-127;if(v<min)min=v;if(v>max)max=v}}dec.push({min:min===128?-128:min,max})}return dec}
         function drawPlaceholder(p){ctx.fillStyle='#aaa';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText('No waveform loaded',p.x+p.width/2,p.y+p.height/2);ctx.fillText('Click "Load WFM File" or drop file here',p.x+p.width/2,p.y+p.height/2+30)}
@@ -483,8 +525,8 @@
         }
 
         // --- UI UPDATES & STATE MANAGEMENT ---
-        function fitView(){const s=getActiveState();if(!s || !s.waveforms.channel1)return;let min=255,max=0;s.drawOrder.filter(c=>s.channelInfo[c].visible&&s.waveforms[c]).forEach(c=>{const d=s.waveforms[c];for(let v of d){if(v<min)min=v;if(v>max)max=v}});min-=127;max-=127;const m=(max-min)*0.1;s.view={startIndex:0,endIndex:s.waveforms.channel1.length,vMin:min-m-10||-10,vMax:max+m+10||10};updateControlsFromView(s);draw()}
-        function resetView() { if (getActiveState()) fitView(); }
+        function fullResetView(){const s=getActiveState();if(!s||!s.waveforms.channel1)return;let min=255,max=0;s.drawOrder.filter(c=>s.channelInfo[c].visible&&s.waveforms[c]).forEach(c=>{const d=s.waveforms[c];for(let v of d){if(v<min)min=v;if(v>max)max=v}});min-=127;max-=127;const m=(max-min)*0.1;s.view={startIndex:0,endIndex:s.waveforms.channel1.length,vMin:min-m-10||-10,vMax:max+m+10||10};isYFitted=false;updateControlsFromView(s);draw()}
+        function fitYToView() {const s=getActiveState();if(!s||!s.waveforms.channel1)return;let min=255,max=0;const start=Math.floor(s.view.startIndex),end=Math.ceil(s.view.endIndex);s.drawOrder.filter(c=>s.channelInfo[c].visible&&s.waveforms[c]).forEach(c=>{const d=s.waveforms[c];for(let i=start;i<end;i++){const v=d[i];if(v<min)min=v;if(v>max)max=v}});if(min===255&&max===0)return;min-=127;max-=127;const m=(max-min)*0.1||10;s.view.vMin=min-m;s.view.vMax=max+m;isYFitted=true;updateControlsFromView(s);draw()}
         function updateControlsFromView(state){if(!state || !state.waveforms.channel1)return;const vRange=(state.view.vMax-state.view.vMin);const tRange=(state.view.endIndex-state.view.startIndex);if(vRange===0||tRange===0)return;document.getElementById('voltageScale').value=formatEng(vRange*VOLTS_PER_BYTE,'V');document.getElementById('timeScale').value=formatEng(tRange*TIME_PER_POINT,'s')}
         function updateCursorReadouts(cursors) { const t1 = cursors.x1 * TIME_PER_POINT, t2 = cursors.x2 * TIME_PER_POINT; const v1 = cursors.y1 * VOLTS_PER_BYTE, v2 = cursors.y2 * VOLTS_PER_BYTE; const dt = Math.abs(t2 - t1), dv = Math.abs(v2 - v1); const freq = dt > 0 ? 1 / dt : 0; document.getElementById('deltaX').value = formatEng(dt, 's'); document.getElementById('deltaFreq').value = formatEng(freq, 'Hz'); document.getElementById('deltaY').value = formatEng(dv, 'V'); document.getElementById('t1').value = formatEng(t1, 's'); document.getElementById('t2').value = formatEng(t2, 's'); document.getElementById('v1').value = formatEng(v1, 'V'); document.getElementById('v2').value = formatEng(v2, 'V'); }
         function calculateStats(data, view) {
@@ -566,7 +608,7 @@
             });
             
             updateUIFromState();
-            fitView();
+            fullResetView();
         }
 
         function closeTab(index) {
@@ -625,11 +667,146 @@
 
         // --- EVENT HANDLERS ---
         function getInteractionAtPos(pos) { const state=getActiveState(); if(!state) return {type:null}; const handleSize = 8, tol = handleSize / 2; for (let i = state.annotations.length - 1; i >= 0; i--) { const box = state.annotations[i]; const p1 = dataToScreen({x: box.t1, y: box.v1}, state.view), p2 = dataToScreen({x: box.t2, y: box.v2}, state.view); const x=Math.min(p1.x,p2.x), y=Math.min(p1.y,p2.y), w=Math.abs(p1.x-p2.x), h=Math.abs(p1.y-p2.y); const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === i; if (isSelected) { if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - y) < tol) return {type: 'annotation', index: i, handle: 'tl'}; if (Math.abs(pos.x - (x+w)) < tol && Math.abs(pos.y - y) < tol) return {type: 'annotation', index: i, handle: 'tr'}; if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - (y+h)) < tol) return {type: 'annotation', index: i, handle: 'bl'}; if (Math.abs(pos.x - (x+w)) < tol && Math.abs(pos.y - (y+h)) < tol) return {type: 'annotation', index: i, handle: 'br'}; } if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) return {type: 'annotation', index: i, handle: 'body'}; } if (state.cursors.enabled) { const x1_s = dataToScreen({x: state.cursors.x1, y: 0}, state.view).x, x2_s = dataToScreen({x: state.cursors.x2, y: 0}, state.view).x; const y1_s = dataToScreen({x: 0, y: state.cursors.y1}, state.view).y, y2_s = dataToScreen({x: 0, y: state.cursors.y2}, state.view).y; if (Math.abs(pos.x - x1_s) < tol) return { type: 'cursor', handle: 'x1' }; if (Math.abs(pos.x - x2_s) < tol) return { type: 'cursor', handle: 'x2' }; if (Math.abs(pos.y - y1_s) < tol) return { type: 'cursor', handle: 'y1' }; if (Math.abs(pos.y - y2_s) < tol) return { type: 'cursor', handle: 'y2' }; } return { type: null }; }
-        canvas.addEventListener('mousedown', e => { const state=getActiveState(); if (!state) return; if(textAnnotationMode) { createTextAnnotationInput(e); return; } activeInteraction = getInteractionAtPos({x: e.offsetX, y: e.offsetY}); if (activeInteraction.type) { isDragging = false; draw(); return; } if (state.cursors.enabled) { const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight); const mousePos = {x: e.offsetX, y: e.offsetY}; if (mousePos.y > plotArea.y + plotArea.height && mousePos.x > plotArea.x && mousePos.x < plotArea.x + plotArea.width) { const targetX = screenToData(mousePos, state.view).x; if (Math.abs(targetX - state.cursors.x1) < Math.abs(targetX - state.cursors.x2)) state.cursors.x1 = targetX; else state.cursors.x2 = targetX; trackCursors(); draw(); return; } if (mousePos.x < plotArea.x && mousePos.y > plotArea.y && mousePos.y < plotArea.y + plotArea.height) { const targetY = screenToData(mousePos, state.view).y; state.cursors.trackingChannel = null; document.querySelector(`input[name="cursorTrack"][value="null"]`).checked = true; if (Math.abs(targetY - state.cursors.y1) < Math.abs(targetY - state.cursors.y2)) state.cursors.y1 = targetY; else state.cursors.y2 = targetY; draw(); return; } } isDragging = true; isShiftPressed = e.shiftKey; dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart }; });
-        canvas.addEventListener('mousemove', e => { const state=getActiveState(); if (!state) return; const mousePos = { x: e.offsetX, y: e.offsetY }; const dataPos = screenToData(mousePos, state.view); if (activeInteraction.type === 'cursor') { if (activeInteraction.handle.startsWith('x')) { state.cursors[activeInteraction.handle] = dataPos.x; trackCursors(); } else { state.cursors[activeInteraction.handle] = dataPos.y; state.cursors.trackingChannel = null; document.querySelector(`input[name="cursorTrack"][value="null"]`).checked = true;} draw(); } else if (activeInteraction.type === 'annotation') { const box = state.annotations[activeInteraction.index]; const lastDataPos = screenToData(dragStart, state.view); const dx = dataPos.x - lastDataPos.x, dy = dataPos.y - lastDataPos.y; if (activeInteraction.handle === 'body') { box.t1 += dx; box.t2 += dx; box.v1 += dy; box.v2 += dy; } else { if (activeInteraction.handle.includes('l')) box.t1 = dataPos.x; if (activeInteraction.handle.includes('r')) box.t2 = dataPos.x; if (activeInteraction.handle.includes('t')) box.v2 = dataPos.y; if (activeInteraction.handle.includes('b')) box.v1 = dataPos.y; } dragStart = mousePos; draw(); } else if(isDragging) { dragEnd = mousePos; draw(); } else { const interaction = getInteractionAtPos(mousePos); let cursorStyle = 'crosshair'; if(textAnnotationMode) cursorStyle = 'text'; else if (interaction.type === 'annotation') cursorStyle = interaction.handle === 'body' ? 'move' : 'pointer'; else if (interaction.type === 'cursor') cursorStyle = interaction.handle.startsWith('x') ? 'ew-resize' : 'ns-resize'; canvas.style.cursor = cursorStyle; } });
-        canvas.addEventListener('mouseup', e => { const state=getActiveState(); if (!state) return; if (activeInteraction.type === 'annotation') { const box = state.annotations[activeInteraction.index]; if (box.t1 > box.t2) [box.t1, box.t2] = [box.t2, box.t1]; if (box.v1 > box.v2) [box.v1, box.v2] = [box.v2, box.v1]; if (activeInteraction.handle !== 'body') activeInteraction.handle = 'body'; draw(); return; } if (activeInteraction.type) { activeInteraction = { type: null }; draw(); return; } if (!isDragging) return; isDragging = false; if (isShiftPressed) { if (state.annotationMode && Math.abs(dragEnd.x - dragStart.x) > 5) { const {x: t1_raw, y: v2_raw} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view); const {x: t2_raw, y: v1_raw} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view); state.annotations.push({ t1: t1_raw, v1: v1_raw, t2: t2_raw, v2: v2_raw }); } draw(); return; } if (Math.abs(dragEnd.x - dragStart.x) < 10 || Math.abs(dragEnd.y - dragStart.y) < 10) { draw(); return; } const { x: nStartI, y: nVMax } = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view); const { x: nEndI, y: nVMin } = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view); if (nEndI - nStartI < 10) return; state.view = { startIndex: nStartI, endIndex: nEndI, vMin: nVMin, vMax: nVMax }; updateControlsFromView(state); draw(); });
-        canvas.addEventListener('dblclick', resetView);
-        canvas.addEventListener('wheel', e => { const state=getActiveState(); if(!state)return; e.preventDefault(); const pA=getPlotArea(canvas.clientWidth, canvas.clientHeight); const currentTRange = state.view.endIndex - state.view.startIndex, currentVRange = state.view.vMax - state.view.vMin; if (e.ctrlKey) { const mouseXRatio = (e.offsetX - pA.x) / pA.width, mouseYRatio = 1 - (e.offsetY - pA.y) / pA.height; if (displayOptions.discreteZoom) { const direction = e.deltaY < 0 ? 1 : -1; if (e.shiftKey) { const currentVScale = currentVRange * VOLTS_PER_BYTE / Y_DIVS; let currentIndex = STD_VOLT_SCALES.findIndex(s => s >= currentVScale); if (currentIndex === -1) currentIndex = STD_VOLT_SCALES.length -1; if (direction < 0 && STD_VOLT_SCALES[currentIndex] >= currentVScale) currentIndex--; const newIndex = Math.max(0, Math.min(STD_VOLT_SCALES.length - 1, currentIndex + direction)); const newVScale = STD_VOLT_SCALES[newIndex]; const newVRange = (newVScale / VOLTS_PER_BYTE) * Y_DIVS; const pivotV = state.view.vMin + currentVRange * mouseYRatio; state.view.vMin = pivotV - newVRange * mouseYRatio; state.view.vMax = pivotV + newVRange * (1 - mouseYRatio); } else { const currentTScale = currentTRange * TIME_PER_POINT / X_DIVS; let currentIndex = STD_TIME_SCALES.findIndex(s => s >= currentTScale); if (currentIndex === -1) currentIndex = STD_TIME_SCALES.length -1; if (direction < 0 && STD_TIME_SCALES[currentIndex] >= currentTScale) currentIndex--; const newIndex = Math.max(0, Math.min(STD_TIME_SCALES.length - 1, currentIndex + direction)); const newTScale = STD_TIME_SCALES[newIndex]; const newTRange = (newTScale / TIME_PER_POINT) * X_DIVS; const pivotT = state.view.startIndex + currentTRange * mouseXRatio; state.view.startIndex = pivotT - newTRange * mouseXRatio; state.view.endIndex = pivotT + newTRange * (1 - mouseXRatio); } } else { const z = e.deltaY < 0 ? 0.85 : 1.15; if (e.shiftKey) { const pivotV = state.view.vMin + currentVRange * mouseYRatio; state.view.vMin = pivotV - (currentVRange * z * mouseYRatio); state.view.vMax = pivotV + (currentVRange * z * (1 - mouseYRatio)); } else { const pivotT = state.view.startIndex + currentTRange * mouseXRatio; state.view.startIndex = pivotT - (currentTRange * z * mouseXRatio); state.view.endIndex = pivotT + (currentTRange * z * (1 - mouseXRatio)); } } } else if(e.shiftKey) { const p = currentTRange * 0.1 * Math.sign(e.deltaY); state.view.startIndex += p; state.view.endIndex += p; } state.view.startIndex = Math.max(0, state.view.startIndex); state.view.endIndex = Math.min(state.waveforms.channel1.length, state.view.endIndex); if (state.view.endIndex - state.view.startIndex < 1) { state.view.endIndex = state.view.startIndex + 1; } if (state.view.vMax - state.view.vMin < 1) { state.view.vMax = state.view.vMin + 1; } updateControlsFromView(state); draw(); },{passive:false});
+        
+        canvas.addEventListener('mousedown', e => {
+            const state = getActiveState(); if (!state) return;
+            if (textAnnotationMode) { createTextAnnotationInput(e); return; }
+            isYFitted = false;
+
+            activeInteraction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY });
+            if (activeInteraction.type) {
+                isDragging = false; isPanning = false; draw();
+                return;
+            }
+
+            if (zoomModeEnabled) {
+                isDragging = true; isPanning = false; isShiftPressed = false;
+                dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
+            } else if (e.shiftKey) {
+                isDragging = true; isPanning = false; isShiftPressed = true;
+                dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
+            } else {
+                isPanning = true; isDragging = false; isShiftPressed = false;
+                panStart = { x: e.offsetX, y: e.offsetY, viewStart: state.view.startIndex, viewEnd: state.view.endIndex, vMin: state.view.vMin, vMax: state.view.vMax };
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+        
+        canvas.addEventListener('mousemove', e => {
+            const state=getActiveState(); if (!state) return;
+            
+            if (activeInteraction.type) { /* Annotation/Cursor logic here */ }
+            else if (isPanning) {
+                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight);
+                const dx = e.offsetX - panStart.x;
+                const indexPerPixel = (panStart.viewEnd - panStart.viewStart) / plotArea.width;
+                const indexShift = dx * indexPerPixel;
+                let newStart = panStart.viewStart - indexShift;
+                let newEnd = panStart.viewEnd - indexShift;
+                if (newStart < 0) { newEnd -= newStart; newStart = 0; }
+                if (newEnd > state.waveforms.channel1.length) { newStart -= (newEnd - state.waveforms.channel1.length); newEnd = state.waveforms.channel1.length; }
+                if (newStart < 0) newStart = 0;
+                state.view.startIndex = newStart; state.view.endIndex = newEnd;
+                
+                const dy = e.offsetY - panStart.y;
+                const voltagePerPixel = (panStart.vMax - panStart.vMin) / plotArea.height;
+                const voltageShift = dy * voltagePerPixel;
+                state.view.vMin = panStart.vMin + voltageShift;
+                state.view.vMax = panStart.vMax + voltageShift;
+
+                updateControlsFromView(state); draw();
+            }
+            else if(isDragging) { dragEnd = { x: e.offsetX, y: e.offsetY }; draw(); }
+            else { 
+                const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY });
+                if (zoomModeEnabled) { canvas.style.cursor = 'zoom-in'; }
+                else if (textAnnotationMode) { canvas.style.cursor = 'text'; }
+                else if (interaction.type === 'annotation') canvas.style.cursor = interaction.handle === 'body' ? 'move' : 'pointer';
+                else if (interaction.type === 'cursor') canvas.style.cursor = interaction.handle.startsWith('x') ? 'ew-resize' : 'ns-resize';
+                else canvas.style.cursor = 'grab';
+            }
+        });
+        
+        canvas.addEventListener('mouseup', e => {
+            const state=getActiveState(); if (!state) return;
+            if (activeInteraction.type) { activeInteraction = { type: null }; draw(); return; }
+            
+            if (isPanning) {
+                isPanning = false;
+                canvas.style.cursor = zoomModeEnabled ? 'zoom-in' : 'grab';
+            }
+
+            if (isDragging) {
+                const dragWidth = Math.abs(dragEnd.x - dragStart.x);
+                const dragHeight = Math.abs(dragEnd.y - dragStart.y);
+
+                if (isShiftPressed) {
+                    if (state.annotationMode && dragWidth > 5) {
+                        const {x: t1_raw, y: v2_raw} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view);
+                        const {x: t2_raw, y: v1_raw} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view);
+                        state.annotations.push({ t1: t1_raw, v1: v1_raw, t2: t2_raw, v2: v2_raw });
+                    }
+                } else if (zoomModeEnabled) {
+                    if (dragWidth >= 10 && dragHeight >= 10) {
+                        const { x: nStartI, y: nVMax } = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view);
+                        const { x: nEndI, y: nVMin } = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view);
+                        if (nEndI - nStartI >= 10) {
+                            state.view = { startIndex: nStartI, endIndex: nEndI, vMin: nVMin, vMax: nVMax };
+                            updateControlsFromView(state);
+                        }
+                    }
+                    zoomModeEnabled = false;
+                    statusText.textContent = `Loaded: ${state.fileName}`;
+                    canvas.style.cursor = 'grab';
+                }
+                
+                isDragging = false;
+                isShiftPressed = false;
+                draw();
+            }
+        });
+        
+        canvas.addEventListener('dblclick', fullResetView);
+        
+        canvas.addEventListener('wheel', e => {
+            const state = getActiveState(); if (!state) return;
+            e.preventDefault();
+            isYFitted = false;
+            const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight);
+
+            const isOverLeftYAxis = e.offsetX < plotArea.x && e.offsetX > 0;
+            const isOverRightYAxis = e.offsetX > plotArea.x + plotArea.width;
+            
+            const currentTRange = state.view.endIndex - state.view.startIndex;
+            const currentVRange = state.view.vMax - state.view.vMin;
+            
+            if (isOverLeftYAxis || isOverRightYAxis) {
+                const mouseYRatio = 1 - ((e.offsetY - plotArea.y) / plotArea.height);
+                const z = e.deltaY < 0 ? 0.85 : 1.15;
+                const pivotV = state.view.vMin + currentVRange * mouseYRatio;
+                state.view.vMin = pivotV - (currentVRange * z * mouseYRatio);
+                state.view.vMax = pivotV + (currentVRange * z * (1 - mouseYRatio));
+            } else {
+                if (e.shiftKey) {
+                    const p = currentTRange * 0.1 * Math.sign(e.deltaY);
+                    state.view.startIndex += p; state.view.endIndex += p;
+                } else {
+                    let mouseXRatio = (e.offsetX - plotArea.x) / plotArea.width;
+                    mouseXRatio = Math.max(0, Math.min(1, mouseXRatio)); 
+                    const z = e.deltaY < 0 ? 0.85 : 1.15;
+                    const pivotT = state.view.startIndex + currentTRange * mouseXRatio;
+                    state.view.startIndex = pivotT - (currentTRange * z * mouseXRatio);
+                    state.view.endIndex = pivotT + (currentTRange * z * (1 - mouseXRatio));
+                }
+            }
+
+            state.view.startIndex = Math.max(0, state.view.startIndex);
+            state.view.endIndex = Math.min(state.waveforms.channel1.length, state.view.endIndex);
+            if (state.view.endIndex - state.view.startIndex < 1) { state.view.endIndex = state.view.startIndex + 1; }
+            if (state.view.vMax - state.view.vMin < 1) { state.view.vMax = state.view.vMin + 1; }
+            updateControlsFromView(state);
+            draw();
+        }, { passive: false });
         
         // --- Drag & Drop File Handlers ---
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => document.body.addEventListener(eventName, e => e.preventDefault()));
@@ -640,7 +817,7 @@
         // --- BUTTON & OTHER EVENT LISTENERS ---
         document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
         document.getElementById('fileInput').addEventListener('change', handleFileSelect);
-        document.getElementById('resetViewBtn').addEventListener('click', resetView);
+        document.getElementById('resetViewBtn').addEventListener('click', fullResetView);
         document.getElementById('swapOrderBtn').addEventListener('click', () => { const s=getActiveState(); if (!s) return; s.drawOrder.reverse(); document.querySelector(`.channel-button[data-channel="${s.drawOrder[0]}"] .ch-order`).textContent='(Back)'; document.querySelector(`.channel-button[data-channel="${s.drawOrder[1]}"] .ch-order`).textContent='(Front)'; draw(); });
         document.querySelectorAll('.channel-button').forEach(btn => { btn.addEventListener('click', e => { const s=getActiveState(); if (!s) return; const ch=e.currentTarget.dataset.channel; e.currentTarget.classList.toggle('active'); s.channelInfo[ch].visible=e.currentTarget.classList.contains('active'); draw(); }); });
         document.getElementById('ch1NameInput').addEventListener('input', e => { const s=getActiveState(); if (!s) return; s.channelInfo.channel1.name = e.target.value || 'Channel 1'; draw(); });
@@ -652,7 +829,25 @@
         document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT=s.view.endIndex-s.view.startIndex, spanV=s.view.vMax-s.view.vMin; s.cursors.x1=s.view.startIndex+spanT*0.25; s.cursors.x2=s.view.startIndex+spanT*0.75; s.cursors.y1=s.view.vMin+spanV*0.25; s.cursors.y2=s.view.vMin+spanV*0.75; trackCursors();} draw(); });
         document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
         document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; activeInteraction = {type: null}; draw(); });
-        document.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key.toLowerCase() === 'f') resetView(); if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); exportToClipboard(); } if (e.key === 'Delete' && activeInteraction.type === 'annotation' && activeInteraction.index > -1) { const s=getActiveState(); if(!s) return; s.annotations.splice(activeInteraction.index, 1); activeInteraction = {type: null}; draw(); } if(e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); } if(e.key === 'Escape') { if(textAnnotationMode) toggleTextAnnotationMode(); } });
+        
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT') return;
+            const state = getActiveState();
+            if (e.key.toLowerCase() === 'f') { if (state) { if(isYFitted) { fullResetView(); } else { fitYToView(); } } }
+            if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); exportToClipboard(); }
+            if (e.key === 'Delete' && activeInteraction.type === 'annotation' && activeInteraction.index > -1) { if(!state) return; state.annotations.splice(activeInteraction.index, 1); activeInteraction = {type: null}; draw(); }
+            if (e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); }
+            if (e.key.toLowerCase() === 'z') { if (state && !textAnnotationMode) { zoomModeEnabled = true; canvas.style.cursor = 'zoom-in'; statusText.textContent = 'Zoom Mode: Click and drag on the chart to zoom into an area.'; } }
+            if (e.key === 'Escape') {
+                if (textAnnotationMode) toggleTextAnnotationMode();
+                if (zoomModeEnabled) {
+                    zoomModeEnabled = false;
+                    canvas.style.cursor = 'grab';
+                    if (state) statusText.textContent = `Loaded: ${state.fileName}`;
+                    else statusText.textContent = 'Ready to load WFM file';
+                }
+            }
+        });
         
         // --- CURSOR FEATURE LISTENERS ---
         document.querySelectorAll('input[name="cursorTrack"]').forEach(radio => { radio.addEventListener('change', e => { const s = getActiveState(); if (s) { s.cursors.trackingChannel = e.target.value === 'null' ? null : e.target.value; trackCursors(); draw(); }}); });
@@ -665,7 +860,7 @@
         function setCursorsToExtrema(type) { const s = getActiveState(); if (!s) return; const visibleChannels = s.drawOrder.filter(ch => s.channelInfo[ch].visible); if (visibleChannels.length === 0) return; const extrema = findViewExtrema(visibleChannels); if(type === 'max' && extrema.max.index !== -1) { s.cursors.x1 = extrema.max.index; s.cursors.y1 = extrema.max.val - 127; } else if (type === 'min' && extrema.min.index !== -1) { s.cursors.x2 = extrema.min.index; s.cursors.y2 = extrema.min.val - 127; } updateCursorReadouts(s.cursors); draw(); }
         
         // --- TEXT ANNOTATION LOGIC ---
-        function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode && s.annotationMode) s.annotationMode = false; canvas.style.cursor = textAnnotationMode ? 'text' : 'crosshair'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
+        function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode && s.annotationMode) s.annotationMode = false; canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
         function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const dataPos = screenToData({x: e.offsetX, y: e.offsetY}, s.view); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.offsetX}px`; input.style.top = `${e.offsetY}px`; displayArea.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ x: dataPos.x, y: dataPos.y, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
         
         // --- MODAL & EXPORT LOGIC ---
