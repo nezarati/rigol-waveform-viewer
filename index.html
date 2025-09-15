@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rigol WFM Waveform Viewer</title>
+    <title>Universal WFM Waveform Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
@@ -38,11 +38,13 @@
         .file-info { background: #454545; padding: 12px; border-radius: 4px; margin-top: 12px; font-size: 14px; word-wrap: break-word;}
         .control-item { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
         .control-label { font-size: 14px; color: #a0a0a0; }
-        .control-input { width: 110px; padding: 4px 8px; background: #454545; border: 1px solid #5a5a5a; border-radius: 4px; color: white; pointer-events: none; font-size: 13px; font-family: Consolas, monospace;}
+        .control-input { width: 110px; padding: 4px 8px; background: #454545; border: 1px solid #5a5a5a; border-radius: 4px; color: white; font-size: 13px; font-family: Consolas, monospace;}
         .checkbox-item { margin-top: 15px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
         .channel-button { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: #454545; border: none; border-radius: 4px; color: white; cursor: pointer; margin-bottom: 8px; width: 100%; transition: background 0.2s; font-size: 15px; }
-        .channel-button.active[data-channel="channel1"] { background: #00bcf2; }
-        .channel-button.active[data-channel="channel2"] { background: #ff4343; }
+        .channel-button.active.ch1 { background: #00bcf2; }
+        .channel-button.active.ch2 { background: #ff4343; }
+        .channel-button.active.ch3 { background: #8aff8a; }
+        .channel-button.active.ch4 { background: #ff8aff; }
         .channel-button .ch-name { display: flex; align-items: center; gap: 8px; }
         .channel-button .ch-order { font-size: 12px; color: #ccc; }
         .file-input { display: none; }
@@ -58,8 +60,10 @@
         #ieeeStyleCheckbox:checked ~ .ieee-options { display: block; }
         .modal-footer { margin-top: 30px; text-align: right; }
         .modal-button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; }
-        .export-confirm-btn { background: #0078d7; color: white; }
-        .export-confirm-btn:hover { background: #005a9e; }
+        .modal-confirm-btn { background: #0078d7; color: white; }
+        .modal-confirm-btn:hover { background: #005a9e; }
+        .modal-cancel-btn { background: #5e5e5e; color: white; margin-right: 10px; }
+        .modal-cancel-btn:hover { background: #6a6a6a; }
         .sub-panel { margin-top: 12px; border-top: 1px solid #555; padding-top: 12px; }
         #text-annotation-input { position: fixed; background: #2d2d2d; color: white; border: 1px solid #0078d7; padding: 5px; z-index: 110; border-radius: 3px; }
         
@@ -68,6 +72,14 @@
         .drag-overlay-content { text-align: center; color: white; }
         .drag-overlay-content i { font-size: 80px; }
         .drag-overlay-content span { display: block; font-size: 24px; margin-top: 20px; }
+
+        #fileDetailsContent, .load-options-info { font-family: Consolas, monospace; font-size: 12px; line-height: 1.6; }
+        #fileDetailsContent div, .load-options-info div { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        #fileDetailsContent span:first-child, .load-options-info span:first-child { color: #a0a0a0; padding-right: 15px;}
+        .load-options-channels { margin-top: 20px; }
+        .load-options-channel-item { background: #4a4a4a; padding: 12px; border-radius: 5px; margin-bottom: 10px; }
+        .load-options-channel-item h4 { margin-bottom: 10px; border-bottom: 1px solid #666; padding-bottom: 5px; }
+
 
         @media (max-width: 768px) {
             body { padding: 0; }
@@ -89,24 +101,16 @@
             </div>
              <div class="control-panel">
                 <div class="panel-title">Channel Display</div>
-                <button class="channel-button active" data-channel="channel1"><span class="ch-name"><i class="fas fa-wave-square" style="color: #00bcf2"></i> Channel 1</span><span class="ch-order">(Back)</span></button>
-                <button class="channel-button active" data-channel="channel2"><span class="ch-name"><i class="fas fa-wave-square" style="color: #ff4343"></i> Channel 2</span><span class="ch-order">(Front)</span></button>
-                <button class="tool-button" id="swapOrderBtn" style="width:100%; margin-top: 8px;"><i class="fas fa-layer-group"></i> Swap Order</button>
-                <div class="sub-panel">
-                    <div class="control-item">
-                        <label for="ch1NameInput" class="control-label">Ch 1 Legend</label>
-                        <input type="text" id="ch1NameInput" value="Channel 1" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                    </div>
-                    <div class="control-item">
-                        <label for="ch2NameInput" class="control-label">Ch 2 Legend</label>
-                        <input type="text" id="ch2NameInput" value="Channel 2" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                    </div>
+                <div id="channelButtonContainer">
                 </div>
+                <button class="tool-button" id="swapOrderBtn" style="width:100%; margin-top: 8px;"><i class="fas fa-layer-group"></i> Swap Order</button>
+                <div class="sub-panel" id="channelLegendContainer">
+                        </div>
             </div>
             <div class="control-panel">
                 <div class="panel-title">Display Controls</div>
-                <div class="control-item"><span class="control-label">Time Scale (s/div)</span><input type="text" class="control-input" id="timeScale" value="-" style="pointer-events: auto;"></div>
-                <div class="control-item"><span class="control-label">Voltage Scale (V/div)</span><input type="text" class="control-input" id="voltageScale" value="-" style="pointer-events: auto;"></div>
+                <div class="control-item"><span class="control-label">Time Scale (s/div)</span><input type="text" class="control-input" id="timeScale" value="-"></div>
+                <div id="voltageScaleContainer"></div>
                 <div class="checkbox-item">
                     <label for="showStatsCheckbox"><input type="checkbox" id="showStatsCheckbox" checked> Show Measurements</label>
                 </div>
@@ -127,36 +131,41 @@
                  <div class="checkbox-item">
                     <label for="bwCopyCheckbox"><input type="checkbox" id="bwCopyCheckbox"> B&W Copy (Ctrl+C)</label>
                 </div>
+                <div class="checkbox-item">
+                    <label for="separateViewCheckbox"><input type="checkbox" id="separateViewCheckbox"> Separate Diagrams</label>
+                </div>
             </div>
              <div class="control-panel" id="cursorPanel" style="display: none;">
                 <div class="panel-title">Cursor Measurements</div>
-                 <div class="control-item"><span class="control-label">ΔX (Time)</span><input type="text" class="control-input" id="deltaX" value="-" readonly></div>
-                 <div class="control-item"><span class="control-label">1/ΔX (Freq)</span><input type="text" class="control-input" id="deltaFreq" value="-" readonly></div>
-                 <div class="control-item"><span class="control-label">ΔY (Voltage)</span><input type="text" class="control-input" id="deltaY" value="-" readonly></div>
-                 <div class="sub-panel">
-                     <div class="control-item"><span class="control-label">T1</span><input type="text" class="control-input" id="t1" value="-" readonly></div>
-                     <div class="control-item"><span class="control-label">T2</span><input type="text" class="control-input" id="t2" value="-" readonly></div>
-                     <div class="control-item"><span class="control-label">V1</span><input type="text" class="control-input" id="v1" value="-" readonly></div>
-                     <div class="control-item"><span class="control-label">V2</span><input type="text" class="control-input" id="v2" value="-" readonly></div>
-                 </div>
-                 <div class="sub-panel">
-                     <div class="control-label" style="margin-bottom: 8px;">Cursor Tracking</div>
-                     <div style="display: flex; justify-content: space-around; font-size: 13px;">
-                         <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
-                         <label><input type="radio" name="cursorTrack" value="channel1"> CH1</label>
-                         <label><input type="radio" name="cursorTrack" value="channel2"> CH2</label>
-                     </div>
-                     <div style="display: flex; gap: 8px; margin-top: 12px;">
-                          <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
-                          <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
-                     </div>
-                 </div>
+                  <div class="control-item"><span class="control-label">ΔX (Time)</span><input type="text" class="control-input" id="deltaX" value="-" readonly></div>
+                  <div class="control-item"><span class="control-label">1/ΔX (Freq)</span><input type="text" class="control-input" id="deltaFreq" value="-" readonly></div>
+                  <div class="control-item"><span class="control-label">ΔY (<span id="cursorYUnit">V</span>)</span><input type="text" class="control-input" id="deltaY" value="-" readonly></div>
+                  <div class="sub-panel">
+                      <div class="control-item"><span class="control-label">T1</span><input type="text" class="control-input" id="t1" value="-" readonly></div>
+                      <div class="control-item"><span class="control-label">T2</span><input type="text" class="control-input" id="t2" value="-" readonly></div>
+                      <div class="control-item"><span class="control-label">V1</span><input type="text" class="control-input" id="v1" value="-" readonly></div>
+                      <div class="control-item"><span class="control-label">V2</span><input type="text" class="control-input" id="v2" value="-" readonly></div>
+                  </div>
+                  <div class="sub-panel">
+                      <div class="control-label" style="margin-bottom: 8px;">Cursor Tracking</div>
+                      <div id="cursorTrackContainer" style="display: flex; justify-content: space-around; font-size: 13px; flex-wrap: wrap; gap: 5px;">
+                            <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
+                           </div>
+                      <div style="display: flex; gap: 8px; margin-top: 12px;">
+                            <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
+                            <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
+                      </div>
+                  </div>
+            </div>
+            <div class="control-panel" id="fileDetailsPanel" style="display: none;">
+                <div class="panel-title">File Details</div>
+                <div id="fileDetailsContent"></div>
             </div>
         </div>
         <div class="content-area">
             <div class="tab-container" id="tabContainer"></div>
             <div class="toolbar">
-                <button class="tool-button" id="resetViewBtn"><i class="fas fa-expand"></i> Reset View</button>
+                <button class="tool-button" id="resetViewBtn"><i class="fas fa-expand"></i> Reset Offsets & View</button>
                 <button class="tool-button" id="cursorBtn"><i class="fas fa-ruler-combined"></i> Cursors</button>
                 <button class="tool-button" id="annotateBtn"><i class="fa-solid fa-square-pen"></i> Annotate</button>
                 <button class="tool-button" id="clearAnnotationsBtn" style="display: none;"><i class="fa-solid fa-trash-can"></i> Clear</button>
@@ -166,24 +175,26 @@
         </div>
     </div>
     <div class="status-bar">
-        <div class="window-title">Advanced Rigol WFM Viewer</div>
+        <div class="window-title">Advanced WFM Viewer</div>
         <div id="statusText" style="flex: 1;">Ready to load WFM file</div>
-        <div>WFM Viewer v14.1</div>
+        <div>Viewer v22.5</div>
     </div>
+
     <div class="modal-overlay" id="aboutModal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
             <h2>About WFM Viewer</h2>
-            <p>Created by: <b>Ali Nezarati</b></p>
+            <p>Created by: <b>Ali Nezarati</b>. Enhanced by Gemini.</p>
             <p id="aboutDate"></p>
             <h3>Shortcuts</h3>
             <ul class="shortcut-list">
-                <li><span>Fit Y-Axis to View (1st press)</span><code>F Key</code></li>
-                <li><span>Full Reset View (2nd press)</span><code>F Key</code></li>
+                <li><span>Fit Y-Axis (Channel or All)</span><code>F Key</code></li>
                 <li><span>Full Reset View</span><code>Double Click</code></li>
                 <li><span>Toggle Area Zoom Mode (1-time use)</span><code>Z Key</code></li>
-                <li><span>Pan Chart (X & Y)</span><code>Mouse Drag</code></li>
-                <li><span>Zoom (X/Y)</span><code>Scroll over Axes</code></li>
+                <li><span>Pan Chart (X & Y)</span><code>Mouse Drag (empty area)</code></li>
+                <li><span>Move Channel (Y-Axis)</span><code>Mouse Drag (on trace)</code></li>
+                <li><span>Zoom (X-Axis)</span><code>Scroll over Chart</code></li>
+                <li><span>Zoom (Y-Axis)</span><code>Scroll over Channel's Y-Axis</code></li>
                 <li><span>Copy to Clipboard (PNG)</span><code>Ctrl + C</code></li>
                 <li><span>Add Text Annotation</span><code>T Key</code></li>
                 <li><span>Measure / Annotate area</span><code>Shift + Drag</code></li>
@@ -191,51 +202,67 @@
             </ul>
         </div>
     </div>
+
     <div class="modal-overlay" id="exportModal">
         <div class="modal-content">
             <span class="modal-close">&times;</span>
             <h2>Export Waveform</h2>
              <div class="export-options-container" style="display: flex; flex-direction: column; gap: 20px;">
-                 <div>
-                     <h3 style="margin-bottom: 8px;">Content</h3>
-                     <label style="margin-right: 15px;"><input type="radio" name="content" value="current" checked> Current View</label>
-                     <label><input type="radio" name="content" value="all"> All Data</label>
-                 </div>
-                 <div>
-                     <h3 style="margin-bottom: 8px;">Format</h3>
-                     <label style="margin-right: 15px;"><input type="radio" name="format" value="png" checked> PNG</label>
-                     <label style="margin-right: 15px;"><input type="radio" name="format" value="svg"> SVG</label>
-                     <label><input type="radio" name="format" value="csv"> CSV</label>
-                 </div>
-                 <div>
-                     <h3 style="margin-bottom: 8px;">Include & Style</h3>
-                     <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
-                     <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
-                     <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
-                     <label style="margin-right: 15px;"><input type="checkbox" id="bwExportCheckbox"> Black & White</label>
-                     <br><br>
-                     <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
-                 </div>
-                 <div>
-                     <label><input type="checkbox" id="ieeeStyleCheckbox"> <b>Use IEEE Style (Publication)</b></label>
-                     <div class="ieee-options">
-                         <p>Font: Times New Roman, 10pt<br>Background: White</p>
-                         <div class="control-item" style="margin-top: 15px; margin-bottom: 5px;">
-                             <label for="ieeeWidth" class="control-label">Width (inches):</label>
-                             <input type="number" id="ieeeWidth" value="3.45" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                         </div>
-                         <div class="control-item">
-                             <label for="ieeeHeight" class="control-label">Height (inches):</label>
-                             <input type="number" id="ieeeHeight" value="2.5" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                         </div>
-                     </div>
-                 </div>
+                  <div>
+                    <h3 style="margin-bottom: 8px;">Content</h3>
+                    <label style="margin-right: 15px;"><input type="radio" name="content" value="current" checked> Current View</label>
+                    <label><input type="radio" name="content" value="all"> All Data</label>
+                  </div>
+                  <div>
+                    <h3 style="margin-bottom: 8px;">Format</h3>
+                    <label style="margin-right: 15px;"><input type="radio" name="format" value="png" checked> PNG</label>
+                    <label style="margin-right: 15px;"><input type="radio" name="format" value="svg"> SVG</label>
+                    <label><input type="radio" name="format" value="csv"> CSV</label>
+                  </div>
+                  <div>
+                    <h3 style="margin-bottom: 8px;">Include & Style</h3>
+                    <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
+                    <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
+                    <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
+                    <label style="margin-right: 15px;"><input type="checkbox" id="bwExportCheckbox"> Black & White</label>
+                    <br><br>
+                    <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
+                  </div>
+                  <div>
+                    <label><input type="checkbox" id="ieeeStyleCheckbox"> <b>Use IEEE Style (Publication)</b></label>
+                    <div class="ieee-options">
+                        <p>Font: Times New Roman, 10pt<br>Background: White</p>
+                        <div class="control-item" style="margin-top: 15px; margin-bottom: 5px;">
+                            <label for="ieeeWidth" class="control-label">Width (inches):</label>
+                            <input type="number" id="ieeeWidth" value="3.45" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                        </div>
+                        <div class="control-item">
+                            <label for="ieeeHeight" class="control-label">Height (inches):</label>
+                            <input type="number" id="ieeeHeight" value="2.5" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                        </div>
+                    </div>
+                  </div>
              </div>
             <div class="modal-footer">
-                <button class="modal-button export-confirm-btn" id="exportConfirmBtn">Export</button>
+                <button class="modal-button modal-confirm-btn" id="exportConfirmBtn">Export</button>
             </div>
         </div>
     </div>
+
+    <div class="modal-overlay" id="loadOptionsModal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h2>Confirm Waveform Settings</h2>
+            <p id="loadOptionsFileName" style="color: #ccc; margin-bottom: 15px;"></p>
+            <div class="load-options-info" id="loadOptionsInfo"></div>
+            <div class="load-options-channels" id="loadOptionsChannels"></div>
+            <div class="modal-footer">
+                <button class="modal-button modal-cancel-btn" id="loadOptionsCancel">Cancel</button>
+                <button class="modal-button modal-confirm-btn" id="loadOptionsConfirm">Load Waveform</button>
+            </div>
+        </div>
+    </div>
+
     <div id="drag-overlay">
         <div class="drag-overlay-content">
             <i class="fas fa-file-import"></i>
@@ -244,61 +271,224 @@
     </div>
 
 <script>
+    // --- PARSER FOR TEKTRONIX WFM FILES ---
+    class TekWfmParser {
+        constructor(arrayBuffer) {
+            this.buffer = arrayBuffer;
+            this.view = new DataView(this.buffer);
+            const byteOrder = this.view.getUint16(0, false);
+            this.littleEndian = (byteOrder === 0x0F0F);
+        }
+        getUint8(o) { return this.view.getUint8(o); }
+        getInt16(o) { return this.view.getInt16(o, this.littleEndian); }
+        getInt32(o) { return this.view.getInt32(o, this.littleEndian); }
+        getUint32(o) { return this.view.getUint32(o, this.littleEndian); }
+        getFloat64(o) { return this.view.getFloat64(o, this.littleEndian); }
+        getString(o, l) {
+            let s = '';
+            for (let i = 0; i < l; i++) {
+                const c = this.getUint8(o + i);
+                if (c === 0) break;
+                s += String.fromCharCode(c);
+            }
+            return s;
+        }
+        isValid() { return this.getString(2, 8).startsWith(':WFM#00'); }
+        getTimeScale() { return this.getFloat64(478); }
+        getNumDataPoints() { return this.getUint32(494); }
+        getVoltageUnits() { return this.getString(186, 20); }
+        getUserVoltsPerDiv() { return this.getFloat64(266); }
+        getUserVerticalOffset() { return this.getFloat64(294); }
+        isChannelWritten(ch) { return ch === 1; }
+        getChannelData(ch) {
+            if (ch !== 1) return null;
+            const n = this.getNumDataPoints(), vS = this.getFloat64(166), vO = this.getFloat64(174);
+            const dSO = this.getInt32(16), bPP = parseInt(this.getString(15, 1)), fmt = this.getInt32(238);
+            if (fmt !== 0 || bPP !== 2) throw new Error("Unsupported WFM data format (must be 16-bit integer).");
+            if (dSO + n * bPP > this.buffer.byteLength) return null;
+            const d = new Float32Array(n);
+            for (let i = 0; i < n; i++) d[i] = (this.getInt16(dSO + i * bPP) * vS) + vO;
+            return d;
+        }
+    }
+
+    // --- PARSER FOR RIGOL WFM FILES ---
+    class RigolWfmParser {
+        constructor(arrayBuffer) {
+            this.buffer = arrayBuffer;
+            this.view = new DataView(this.buffer);
+            this.littleEndian = true;
+            this.vScaOff = [0, 36, 60, 84, 108]; this.vOffOff = [0, 40, 64, 88, 112]; this.cWrtOff = [0, 49, 73, 97, 121];
+        }
+        getUint8(o) { return this.view.getUint8(o); }
+        getInt16(o) { return this.view.getInt16(o, this.littleEndian); }
+        getUint32(o) { return this.view.getUint32(o, this.littleEndian); }
+        getFloat32(o) { return this.view.getFloat32(o, this.littleEndian); }
+        getBigUint64(o) { return this.view.getBigUint64(o, this.littleEndian); }
+        isValid() { return this.view.getUint16(0, true) === 0xA5A5; }
+        getNumDataPoints() { return this.getUint32(28); }
+        isChannelWritten(c) { return c > 0 && c <= 4 && this.cWrtOff[c] < this.view.byteLength && this.getUint8(this.cWrtOff[c]) !== 0; }
+        getTimeScale() { return 1 / this.getSamplingFrequency(); }
+        getSamplingFrequency() { return this.getFloat32(100); }
+        getVoltageUnits() { return 'V'; }
+        getVoltageScale(c) { return c > 0 && c <= 4 ? this.getUint32(this.vScaOff[c]) * 1e-6 : 0; }
+        getVoltageOffset(c) {
+            if (!this.isChannelWritten(c)) return 0;
+            const rawPos = this.getInt16(this.vOffOff[c]);
+            return -(rawPos / 25.0) * this.getVoltageScale(c) * 4;
+        }
+        getChannelData(c, vpd_override) {
+            if (!this.isChannelWritten(c)) return null;
+            const n = this.getNumDataPoints();
+            const vPD = vpd_override || this.getVoltageScale(c);
+            const iOff = -(this.getInt16(this.vOffOff[c]) / 25.0) * vPD * 4;
+            const dSO = 272;
+            let cDO = 0; for (let i = 1; i < c; i++) { if (this.isChannelWritten(i)) cDO += n; }
+            const tO = dSO + cDO;
+            if (tO + n > this.buffer.byteLength) return null;
+            const d = new Float32Array(n);
+            for (let i = 0; i < n; i++) d[i] = (125 - this.getUint8(tO + i)) / 25.0 * vPD + iOff;
+            return d;
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
-        // --- DOM ELEMENTS ---
         const canvas = document.getElementById('waveformCanvas');
         const ctx = canvas.getContext('2d');
         const tabContainer = document.getElementById('tabContainer');
         const dragOverlay = document.getElementById('drag-overlay');
         const statusText = document.getElementById('statusText');
-        const displayArea = document.getElementById('displayArea');
 
-        // --- GLOBAL & APP STATE ---
         let tabStates = [];
         let activeTabIndex = -1;
         let isDraggingFile = false;
         
-        // Interaction state (applies to active tab)
-        let isDragging = false, isShiftPressed = false, isPanning = false, zoomModeEnabled = false, isYFitted = false;
-        let panStart = { x: 0, y: 0, viewStart: 0, viewEnd: 0, vMin: 0, vMax: 0 };
+        let isPanning = false, zoomModeEnabled = false;
+        let panStart = { x: 0, y: 0, viewStart: 0, viewEnd: 0, vRanges: {} };
         let dragStart = { x: 0, y: 0 }, dragEnd = { x: 0, y: 0 };
-        let activeInteraction = { type: null, index: -1, handle: null };
-        let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false };
+        let activeInteraction = { type: null, index: -1, handle: null, channel: null };
+        let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false, separateView: false };
         let textAnnotationMode = false;
+        let lastMousePos = { x: 0, y: 0 };
 
-        // --- CONSTANTS ---
-        const X_DIVS = 10, Y_DIVS = 8;
-        const PADDING = { top: 30, right: 40, bottom: 60, left: 80 };
-        const TIME_PER_POINT = 2e-9, VOLTS_PER_BYTE = 0.04;
-        const STD_TIME_SCALES = [1e-15, 2e-15, 5e-15, 1e-12, 2e-12, 5e-12, 1e-9, 2e-9, 5e-9, 1e-8, 2e-8, 5e-8, 1e-7, 2e-7, 5e-7, 1e-6, 2e-6, 5e-6, 1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1];
-        const STD_VOLT_SCALES = [1e-15, 2e-15, 5e-15, 1e-12, 2e-12, 5e-12, 1e-9, 2e-9, 5e-9, 1e-6, 2e-6, 5e-6, 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1e3, 2e3, 5e3, 10e3, 20e3];
+        const X_DIVS = 10;
+        const Y_DIVS = 10;
+        const Y_DIVS_SEPARATE = 4;
+        const PADDING_STATIC = { top: 30, right: 40, bottom: 60 };
+        const Y_AXIS_WIDTH = 70;
+        const Y_AXIS_WIDTH_SEPARATE = 55;
+        const CHANNEL_COLORS = ['#00bcf2', '#ff4343', '#8aff8a', '#ff8aff'];
+        let lastRigolMultiplier = {};
 
-        // --- STATE MANAGEMENT ---
-        function createDefaultTabState(fileName) {
-            return {
+        function createDefaultTabState(fileName, parser, overrides = {}) {
+            const timePerPoint = parser.getTimeScale();
+            const numPoints = parser.getNumDataPoints();
+            
+            const newState = {
                 fileName: fileName,
-                waveforms: { channel1: null, channel2: null },
-                channelInfo: {
-                    channel1: { name: 'Channel 1', visible: true, color: '#00bcf2' },
-                    channel2: { name: 'Channel 2', visible: true, color: '#ff4343' }
-                },
-                drawOrder: ['channel1', 'channel2'],
-                view: { startIndex: 0, endIndex: 0, vMin: -128, vMax: 128 },
+                parser: parser,
+                waveforms: {},
+                metadata: { timePerPoint: timePerPoint, totalTime: numPoints * timePerPoint, numPoints: numPoints },
+                channelInfo: {},
+                drawOrder: [],
+                view: { startIndex: 0, endIndex: numPoints },
                 cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
-                annotations: [],
-                textAnnotations: [],
-                annotationMode: false
+                annotations: [], textAnnotations: [], annotationMode: false
             };
+
+            if (parser instanceof TekWfmParser) {
+                const data = parser.getChannelData(1);
+                const userVoltsPerDiv = parser.getUserVoltsPerDiv();
+                const userVertOffsetDivs = parser.getUserVerticalOffset();
+                const vSpan = userVoltsPerDiv * Y_DIVS;
+                const vCenter = -userVertOffsetDivs * userVoltsPerDiv;
+                
+                newState.waveforms['channel1'] = data;
+                newState.drawOrder.push('channel1');
+                newState.channelInfo['channel1'] = {
+                    name: 'Channel 1', visible: true, color: CHANNEL_COLORS[0], units: parser.getVoltageUnits(),
+                    vMin: vCenter - vSpan / 2, vMax: vCenter + vSpan / 2
+                };
+            } else if (parser instanceof RigolWfmParser) {
+                for (let i = 1; i <= 4; i++) {
+                    if (parser.isChannelWritten(i)) {
+                        const chKey = `channel${i}`;
+                        const multiplier = overrides[chKey]?.multiplier || 1;
+                        const voltsPerDiv = parser.getVoltageScale(i) * multiplier;
+                        const data = parser.getChannelData(i, voltsPerDiv);
+                        
+                        if(data) {
+                            const voltageOffset = -(parser.getInt16(parser.vOffOff[i]) / 25.0) * voltsPerDiv * 4;
+                            const vSpan = voltsPerDiv * 8; // Rigol screen has 8 vertical divisions
+
+                            newState.waveforms[chKey] = data;
+                            newState.drawOrder.push(chKey);
+                            newState.channelInfo[chKey] = {
+                                name: `Channel ${i}`, visible: true, color: CHANNEL_COLORS[i - 1], units: 'V',
+                                vMin: voltageOffset - vSpan / 2, vMax: voltageOffset + vSpan / 2
+                            };
+                        }
+                    }
+                }
+            }
+            return newState;
         }
         function getActiveState() { return activeTabIndex > -1 ? tabStates[activeTabIndex] : null; }
         
-        // --- UTILS ---
-        function parseEng(str) { if (typeof str !== 'string' || !str) return NaN; const suffixes = { f: 1e-15, p: 1e-12, n: 1e-9, u: 1e-6, µ: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }; str = str.trim(); const numPart = parseFloat(str); if (isNaN(numPart)) return NaN; const suffixMatch = str.match(/[a-zA-Zµ]+$/); const suffix = suffixMatch ? suffixMatch[0][0].toLowerCase() : null; const multiplier = suffixes[suffix] || 1; return numPart * multiplier; }
-        function getPlotArea(width, height) { return { x: PADDING.left, y: PADDING.top, width: width - PADDING.left - PADDING.right, height: height - PADDING.top - PADDING.bottom }; }
-        function screenToData(screenPos, currentView) { const { width, height } = canvas.getBoundingClientRect(); const p = getPlotArea(width, height); if (!currentView || !p.width || !p.height) return {x: 0, y: 0}; return { x: currentView.startIndex + (screenPos.x - p.x) * (currentView.endIndex - currentView.startIndex) / p.width, y: currentView.vMax - (screenPos.y - p.y) * (currentView.vMax - currentView.vMin) / p.height }; }
-        function dataToScreen(dataPos, currentView) { const { width, height } = canvas.getBoundingClientRect(); const p = getPlotArea(width, height); const timeSpan = currentView.endIndex - currentView.startIndex; const voltSpan = currentView.vMax - currentView.vMin; if (!currentView || !timeSpan || !voltSpan) return {x: 0, y: 0}; return { x: p.x + ((dataPos.x - currentView.startIndex) / timeSpan) * p.width, y: p.y + ((currentView.vMax - dataPos.y) / voltSpan) * p.height }; }
+        function parseEng(str) { if (typeof str !== 'string' || !str) return NaN; const suffixes = { f: 1e-15, p: 1e-12, n: 1e-9, u: 1e-6, µ: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }; str = str.trim(); const numPart = parseFloat(str); if (isNaN(numPart)) return NaN; const suffixMatch = str.match(/[a-zA-Zµ]+$/); const suffix = suffixMatch ? suffixMatch[0] : null; const multiplier = suffixes[suffix] || 1; return numPart * multiplier; }
+        function getVisibleChannels(state) {
+            if (!state) return [];
+            return state.drawOrder.filter(ch => state.channelInfo[ch].visible && state.waveforms[ch]);
+        }
+        function getDynamicPadding(state) {
+            if (!state) return { ...PADDING_STATIC, left: Y_AXIS_WIDTH + 10 };
+            const visibleChannels = getVisibleChannels(state);
+            if (visibleChannels.length === 0) return { ...PADDING_STATIC, left: Y_AXIS_WIDTH + 10 };
+            
+            if (displayOptions.separateView) {
+                return { ...PADDING_STATIC, left: Y_AXIS_WIDTH_SEPARATE + 10 };
+            } else {
+                const left = Y_AXIS_WIDTH * visibleChannels.length + 10;
+                return { ...PADDING_STATIC, left: Math.max(Y_AXIS_WIDTH + 10, left) };
+            }
+        }
+        function getPlotArea(width, height, state) {
+            const PADDING = getDynamicPadding(state);
+            return { x: PADDING.left, y: PADDING.top, width: width - PADDING.left - PADDING.right, height: height - PADDING.top - PADDING.bottom };
+        }
+        function screenToData(screenPos, view, state, channelId, plotArea) {
+            const { width, height } = canvas.getBoundingClientRect();
+            const p = plotArea || getPlotArea(width, height, state);
+            if (!view || !state || !p.width || !p.height) return {time: 0, voltage: 0};
+            
+            const targetChannelId = channelId || (getVisibleChannels(state)[0]);
+            let voltage = 0;
+            if (targetChannelId && state.channelInfo[targetChannelId]) {
+                 const chInfo = state.channelInfo[targetChannelId];
+                 voltage = chInfo.vMax - (screenPos.y - p.y) * (chInfo.vMax - chInfo.vMin) / p.height;
+            }
 
-        // --- CORE DRAWING LOGIC ---
+            const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint);
+            return { time, voltage };
+        }
+        function dataToScreen(dataPos, view, state, channelId, plotArea) {
+            const { width, height } = canvas.getBoundingClientRect();
+            const p = plotArea || getPlotArea(width, height, state);
+            if (!view || !state || !channelId || !state.channelInfo[channelId]) return {x: 0, y: 0};
+            
+            const chInfo = state.channelInfo[channelId];
+            const viewTimeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
+            const viewVoltSpan = chInfo.vMax - chInfo.vMin;
+            if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return {x: p.x, y: p.y + p.height / 2};
+            
+            const viewStartTime = view.startIndex * state.metadata.timePerPoint;
+
+            return {
+                x: p.x + ((dataPos.time - viewStartTime) / viewTimeSpan) * p.width,
+                y: p.y + ((chInfo.vMax - dataPos.voltage) / viewVoltSpan) * p.height
+            };
+        }
+
         function resizeCanvas() { const dpr = window.devicePixelRatio || 1; const rect = document.getElementById('waveformContainer').getBoundingClientRect(); canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr); draw(); }
 
         function draw() {
@@ -308,287 +498,489 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#1e1e1e';
                 ctx.fillRect(0, 0, width, height);
-                const plotArea = getPlotArea(width, height);
-
-                drawGrid(plotArea);
-
-                if (!state || !state.waveforms.channel1) {
+                
+                if (!state || Object.keys(state.waveforms).length === 0) {
+                    const plotArea = getPlotArea(width, height, null);
+                    drawGrid(plotArea);
                     drawPlaceholder(plotArea);
-                    drawAxisLabels(plotArea, null);
+                    drawAxisLabels(plotArea, null, null);
                     return;
                 }
                 
-                drawAxisLabels(plotArea, state.view);
+                const visibleChannels = getVisibleChannels(state);
 
-                ctx.save();
-                ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                ctx.clip();
+                if (displayOptions.separateView && visibleChannels.length > 0) {
+                    const PADDING = getDynamicPadding(state);
+                    const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                    const individualPlotHeight = totalPlotHeight / visibleChannels.length;
+
+                    visibleChannels.forEach((ch, index) => {
+                        const plotArea = {
+                            x: PADDING.left,
+                            y: PADDING.top + index * individualPlotHeight,
+                            width: width - PADDING.left - PADDING.right,
+                            height: individualPlotHeight
+                        };
+
+                        drawGrid(plotArea, true, index === visibleChannels.length - 1);
+                        drawAxisLabels(plotArea, state.view, state, ch);
+
+                        ctx.save();
+                        ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                        ctx.clip();
+                        drawWaveform(state, ch, plotArea);
+                        if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
+                        drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
+                        drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
+                        ctx.restore();
+
+                        ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+                        ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    });
+                } else {
+                    const plotArea = getPlotArea(width, height, state);
+                    drawGrid(plotArea, false, true);
+                    drawAxisLabels(plotArea, state.view, state);
+                    
+                    ctx.save();
+                    ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    ctx.clip();
+                    state.drawOrder.forEach(ch => { if (state.channelInfo[ch].visible && state.waveforms[ch]) drawWaveform(state, ch, plotArea); });
+                    if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
+                    drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
+                    drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
+                    ctx.restore();
+                    
+                    ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+                    ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    if (displayOptions.showStats) drawStats(plotArea, state);
+                }
                 
-                state.drawOrder.forEach(ch => { if (state.channelInfo[ch].visible && state.waveforms[ch]) drawWaveform(state.waveforms[ch], state.channelInfo[ch].color, plotArea, state.view); });
-                if (state.cursors.enabled) drawCursors(ctx, plotArea, state.cursors, state.view);
-                drawAnnotations(ctx, state.view, plotArea, dataToScreen, state.annotations);
-                drawTextAnnotations(ctx, state.view, plotArea, dataToScreen, state.textAnnotations);
-                
-                ctx.restore();
-                
-                ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
-                ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                
-                if (displayOptions.showStats) drawStats(plotArea, state);
-                if (isDragging) { if (isShiftPressed) drawMeasurementBox(plotArea, state.view); else if (zoomModeEnabled) drawDragRectangle(); }
+                if (activeInteraction.type === 'zoom-drag' || activeInteraction.type === 'measure-drag') {
+                    drawDragRectangle();
+                    if (activeInteraction.type === 'measure-drag') {
+                        const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
+                        if (w > 5 && h > 5) {
+                            const refCh = getVisibleChannels(state)[0];
+                            if (refCh) {
+                                const p_area = displayOptions.separateView ? null : getPlotArea(width, height, state);
+                                const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, refCh, p_area);
+                                const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, refCh, p_area);
+                                const dt = Math.abs(t_end - t_start), dV = Math.abs(v_end - v_start);
+                                ctx.fillStyle = '#ffc107'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'left';
+                                const x = Math.min(dragStart.x, dragEnd.x) + 5, y = Math.min(dragStart.y, dragEnd.y) - 8;
+                                ctx.textBaseline = 'bottom';
+                                ctx.fillText(`Δt: ${formatEng(dt, 's')}, ΔV: ${formatEng(dV, state.channelInfo[refCh].units)}`, x, y);
+                            }
+                        }
+                    }
+                }
             });
         }
         
-        function formatEng(v, u, p = 3, includeUnit = true){ if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); const s = v < 0 ? '-' : ''; v = Math.abs(v); if (v === 0) return `0 ${includeUnit && u ? u : ''}`.trim(); const k = ['f', 'p', 'n', 'µ', 'm', '', 'k', 'M', 'G', 'T']; const i = Math.floor((Math.log10(v) || 0) / 3); const d = v / 10**(i * 3); return (s + d.toPrecision(p) + (k[i + 5] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); }
-        function drawGrid(p){ctx.strokeStyle='#333';ctx.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;ctx.beginPath();ctx.moveTo(x,p.y);ctx.lineTo(x,p.y+p.height);ctx.stroke()}for(let i=0;i<=Y_DIVS;i++){const y=p.y+i/Y_DIVS*p.height;ctx.beginPath();ctx.moveTo(p.x,y);ctx.lineTo(p.x+p.width,y);ctx.stroke()}}
+        function formatEng(v, u, p = 3, includeUnit = true){ if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); const s = v < 0 ? '-' : ''; v = Math.abs(v); if (v === 0) return `0 ${includeUnit && u ? u : ''}`.trim(); const k = ['f', 'p', 'n', 'µ', 'm', '', 'k', 'M', 'G', 'T']; const i = Math.floor((Math.log10(v) || 0) / 3); const d = v / 10**(i * 3); return (s + d.toPrecision(p) + (k[i + 4] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); }
+        function drawGrid(p, isSeparate=false, isLast=true){ctx.strokeStyle='#333';ctx.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;ctx.beginPath();ctx.moveTo(x,p.y);ctx.lineTo(x,p.y+p.height);ctx.stroke()} const yDivs = (isSeparate || displayOptions.separateView) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;ctx.beginPath();ctx.moveTo(p.x,y);ctx.lineTo(p.x+p.width,y);ctx.stroke()}}
         
-        function drawAxisLabels(p, view){
+        function drawAxisLabels(p, view, state, separateChannelId = null){
             ctx.fillStyle='#a0a0a0'; 
             ctx.font='14px Segoe UI'; 
-            if (view) { 
-                const vR=view.vMax-view.vMin;
-                if(vR>0){
-                    ctx.textAlign='right';
-                    ctx.textBaseline='middle';
-                    for(let i=0;i<=Y_DIVS;i++){
-                        const y=p.y+i/Y_DIVS*p.height;
-                        const v=view.vMax-i/Y_DIVS*vR;
-                        ctx.fillText(formatEng(v*VOLTS_PER_BYTE,'V', 3, false),p.x-10,y);
-                    }
-                }
-                const tS=(view.endIndex-view.startIndex);
-                if(tS>0){
-                    const tStart=view.startIndex*TIME_PER_POINT;
-                    const tSpan=tS*TIME_PER_POINT;
-                    ctx.textAlign='center';
-                    ctx.textBaseline='top';
-                    for(let i=0;i<=X_DIVS;i++){
-                        const x=p.x+i/X_DIVS*p.width;
-                        const timeVal = displayOptions.relativeTime ? (i/X_DIVS*tSpan) : (tStart+i/X_DIVS*tSpan);
-                        ctx.fillText(formatEng(timeVal,'s', 3, false),x,p.y+p.height+10);
+            ctx.textAlign='center';
+            ctx.textBaseline='top';
+            if (view && state) { 
+                const timeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
+                if(timeSpan > 0){
+                    const tStart = view.startIndex * state.metadata.timePerPoint;
+                    for(let i=0; i<=X_DIVS; i++){
+                        const x = p.x + i/X_DIVS*p.width;
+                        const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
+                        if (!separateChannelId || (separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId)) {
+                             ctx.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
+                        }
                     }
                 }
             }
-            // Axis Unit Labels
-            ctx.font = '16px Segoe UI';
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.translate(p.x - 60, p.y + p.height / 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.fillText('Voltage (V)', 0, 0);
-            ctx.restore();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+            if (!separateChannelId || (separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId)) {
+                ctx.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+            }
+
+            if (state) {
+                const visibleChannels = separateChannelId ? [separateChannelId] : getVisibleChannels(state);
+                const yDivs = separateChannelId ? Y_DIVS_SEPARATE : Y_DIVS;
+                visibleChannels.forEach((chId, i) => {
+                    const chInfo = state.channelInfo[chId];
+                    const vRange = chInfo.vMax - chInfo.vMin;
+                    const axisWidth = displayOptions.separateView ? Y_AXIS_WIDTH_SEPARATE : Y_AXIS_WIDTH;
+                    const axisX = p.x - (i * axisWidth) - 10;
+                    ctx.fillStyle = chInfo.color;
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    if (vRange > 0) {
+                        for(let j=0; j<=yDivs; j++){
+                            const y = p.y + j/yDivs*p.height;
+                            const v = chInfo.vMax - j/yDivs*vRange;
+                            ctx.fillText(formatEng(v, '', 3, false), axisX, y);
+                        }
+                    }
+                });
+
+                ctx.save();
+                ctx.fillStyle = '#a0a0a0';
+                ctx.font = '16px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.translate(20, p.y + p.height / 2);
+                ctx.rotate(-Math.PI / 2);
+                const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
+                const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
+                ctx.fillText(`Voltage (${unit})`, 0, 0);
+                ctx.restore();
+            }
         }
 
-        function drawWaveform(d,c,p,view){ctx.strokeStyle=c;ctx.lineWidth=1.5;ctx.beginPath();const pts=view.endIndex-view.startIndex;const vR=view.vMax-view.vMin;if(vR===0)return;if(pts>p.width*2){const dec=decimate(d,view.startIndex,view.endIndex,p.width);for(let i=0;i<dec.length;i++){const{min,max}=dec[i];const x=p.x+i;const y_min=p.y+p.height-((min-view.vMin)/vR)*p.height;const y_max=p.y+p.height-((max-view.vMin)/vR)*p.height;if(i===0)ctx.moveTo(x,y_min);ctx.lineTo(x,y_min);ctx.lineTo(x,y_max)}}else if(pts>1){for(let i=0;i<pts;i++){const v=d[Math.floor(view.startIndex)+i]-127;const x=p.x+i/(pts-1)*p.width;const y=p.y+p.height-((v-view.vMin)/vR)*p.height;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}}ctx.stroke();}
-        function decimate(d, s, e, w){const dec=[];const step=(e-s)/w;for(let i=0;i<w;i++){const start=Math.floor(s+i*step),end=Math.floor(s+(i+1)*step);let min=128,max=-128;for(let j=start;j<end;j++){if(d[j]!==undefined){const v=d[j]-127;if(v<min)min=v;if(v>max)max=v}}dec.push({min:min===128?-128:min,max})}return dec}
+        function drawWaveform(state, ch, p) {
+            const { waveforms, view } = state;
+            const voltageData = waveforms[ch];
+            const chInfo = state.channelInfo[ch];
+            
+            ctx.strokeStyle = chInfo.color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            
+            const vRange = chInfo.vMax - chInfo.vMin;
+            if (vRange <= 0) return;
+
+            const startIndex = Math.max(0, Math.floor(view.startIndex));
+            const endIndex = Math.min(state.metadata.numPoints, Math.ceil(view.endIndex));
+            const pointsInView = endIndex - startIndex;
+            
+            if (pointsInView <= 1) return;
+
+            if (pointsInView > p.width * 2) { // Decimation
+                const step = pointsInView / p.width;
+                for (let i = 0; i < p.width; i++) {
+                    const start = startIndex + Math.floor(i * step);
+                    const end = Math.min(endIndex, startIndex + Math.floor((i + 1) * step));
+                    let min = Infinity, max = -Infinity;
+                    for (let j = start; j < end; j++) {
+                        const v = voltageData[j];
+                        if (v < min) min = v;
+                        if (v > max) max = v;
+                    }
+                    const x_px = p.x + i;
+                    const y_min_px = p.y + ((chInfo.vMax - min) / vRange) * p.height;
+                    const y_max_px = p.y + ((chInfo.vMax - max) / vRange) * p.height;
+                    if (i === 0) ctx.moveTo(x_px, y_max_px);
+                    ctx.lineTo(x_px, y_max_px);
+                    ctx.lineTo(x_px, y_min_px);
+                }
+            } else {
+                for (let i = 0; i < pointsInView; i++) {
+                    const dataIndex = startIndex + i;
+                    const voltage = voltageData[dataIndex];
+                    const x_px = p.x + (dataIndex - view.startIndex) / (view.endIndex - view.startIndex) * p.width;
+                    const y_px = p.y + ((chInfo.vMax - voltage) / vRange) * p.height;
+                    if (i === 0) ctx.moveTo(x_px, y_px);
+                    else ctx.lineTo(x_px, y_px);
+                }
+            }
+            ctx.stroke();
+        }
+
         function drawPlaceholder(p){ctx.fillStyle='#aaa';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText('No waveform loaded',p.x+p.width/2,p.y+p.height/2);ctx.fillText('Click "Load WFM File" or drop file here',p.x+p.width/2,p.y+p.height/2+30)}
         function drawDragRectangle(){ctx.fillStyle='rgba(0,120,215,0.3)';ctx.strokeStyle='#0078d7';ctx.lineWidth=1;const x=Math.min(dragStart.x,dragEnd.x),y=Math.min(dragStart.y,dragEnd.y),w=Math.abs(dragStart.x-dragEnd.x),h=Math.abs(dragStart.y-dragEnd.y);ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h)}
+        function drawStatsTable(context, state, options) { const { x, y, isExport, colors } = options; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0) return { width: 0, height: 0 }; const activeMeasures = {}; if (isExport) { activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true; } else { activeMeasures.max = document.getElementById('showMaxCheckbox').checked; activeMeasures.min = document.getElementById('showMinCheckbox').checked; activeMeasures.avg = document.getElementById('showAvgCheckbox').checked; activeMeasures.rms = document.getElementById('showRmsCheckbox').checked; } const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return { width: 0, height: 0 }; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = isExport ? 8 : 10; const lineHeight = isExport ? 20 : 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding); if (!x && !y) return { width: tableWidth, height: tableHeight }; context.fillStyle = colors.bg; context.fillRect(x, y, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(x, y, tableWidth, tableHeight); let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2); rows.forEach((rowKey, rowIndex) => { let currentX = x; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = x + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke(); currentX += colWidths[i]; } return { width: tableWidth, height: tableHeight }; }
+        function drawStats(plotArea, state) { if (!state || Object.keys(state.waveforms).length === 0) return; drawStatsTable(ctx, state, { x: plotArea.x + 10, y: plotArea.y + 10, isExport: false, colors: { bg: 'rgba(0, 0, 0, 0.6)', grid: '#555555', text: '#fff' } }); }
+        function drawCursors(context, plotArea, state) { const { view, cursors } = state; context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = '#f0ad4e'; const refCh = getVisibleChannels(state)[0] || Object.keys(state.channelInfo)[0]; const x1_s = dataToScreen({time: cursors.x1, voltage: 0}, view, state, refCh, plotArea).x, x2_s = dataToScreen({time: cursors.x2, voltage: 0}, view, state, refCh, plotArea).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = '#32f0ad'; const y1_s = dataToScreen({time: 0, voltage: cursors.y1}, view, state, refCh, plotArea).y, y2_s = dataToScreen({time: 0, voltage: cursors.y2}, view, state, refCh, plotArea).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(state); }
+        function drawAnnotations(context, targetView, plotArea, state, annotations) { const handleSize = 8; const refCh = getVisibleChannels(state)[0]; if(!refCh) return; annotations.forEach((box, index) => { const p1 = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, refCh, plotArea); const p2 = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, refCh, plotArea); const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index; context.strokeStyle = isSelected ? '#ffffff' : '#ffc107'; context.fillStyle = 'rgba(255, 193, 7, 0.15)'; context.lineWidth = isSelected ? 2 : 1; context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h); const dt = box.t2 - box.t1, dV = box.v2 - box.v1; context.fillStyle = isSelected ? '#ffffff' : '#ffc107'; context.font = '10pt "Times New Roman"'; context.textAlign = 'left'; const placeTextOutside = (y + h > plotArea.y + plotArea.height - 30) || h < 35; let textY, textBaseline; if (placeTextOutside) { textY = y - 5; textBaseline = 'bottom'; } else { textY = y + 5; textBaseline = 'top'; } context.textBaseline = textBaseline; context.fillText(`Δt: ${formatEng(dt, 's')}`, x + 5, textY); context.fillText(`ΔV: ${formatEng(dV, 'V')}`, x + 5, textY + (placeTextOutside ? -15 : 15)); if(isSelected && context === ctx){ context.fillStyle = '#ffffff'; context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize); } }); }
+        function drawTextAnnotations(context, targetView, plotArea, state, textAnnotations) { const refCh = getVisibleChannels(state)[0]; if(!refCh) return; textAnnotations.forEach((ann, index) => { const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, refCh, plotArea); const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index; context.font = '14px Segoe UI'; const textWidth = context.measureText(ann.text).width; context.fillStyle = 'rgba(0, 0, 0, 0.6)'; context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22); if (isSelected && context === ctx) { context.strokeStyle = '#00bcf2'; context.lineWidth = 2; context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22); } context.fillStyle = '#f0ad4e'; context.textAlign = 'left'; context.textBaseline = 'middle'; context.fillText(ann.text, pos.x + 5, pos.y - 7); }); }
 
-        // --- UI & FEATURES DRAWING ---
-        // ... (drawStatsTable and drawStats are unchanged)
-        function drawStatsTable(context, state, options) {
-            const { x, y, isExport, colors } = options;
-            const visibleChannels = state.drawOrder.filter(ch => state.channelInfo[ch].visible && state.waveforms[ch]);
-            if (visibleChannels.length === 0) return { width: 0, height: 0 };
+        function fullResetView(){
+            const s = getActiveState(); if (!s) return;
+            let min = Infinity, max = -Infinity;
+            const visibleChannels = getVisibleChannels(s);
+            const channelsToScan = visibleChannels.length > 0 ? visibleChannels : Object.keys(s.waveforms);
 
-            const activeMeasures = {};
-            if (isExport) {
-                activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true;
-            } else {
-                activeMeasures.max = document.getElementById('showMaxCheckbox').checked;
-                activeMeasures.min = document.getElementById('showMinCheckbox').checked;
-                activeMeasures.avg = document.getElementById('showAvgCheckbox').checked;
-                activeMeasures.rms = document.getElementById('showRmsCheckbox').checked;
-            }
-
-            const measureOrder = ['max', 'min', 'avg', 'rms'];
-            const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' };
-            const rows = measureOrder.filter(m => activeMeasures[m]);
-            if (rows.length === 0) return { width: 0, height: 0 };
-
-            const allStats = {};
-            visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state.waveforms[ch], state.view); });
+            channelsToScan.forEach(chKey => {
+                const data = s.waveforms[chKey];
+                for (let v of data) {
+                    if (v < min) min = v;
+                    if (v > max) max = v;
+                }
+            });
             
-            context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace';
-            context.textBaseline = 'middle';
-
-            const rowHeaders = rows.map(r => measureLabels[r]);
-            const cellPadding = isExport ? 8 : 10;
-            const lineHeight = isExport ? 20 : 22;
-
-            const colWidths = [0, ...visibleChannels.map(() => 0)];
-            colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width));
-            rows.forEach(rowKey => {
-                visibleChannels.forEach((ch, chIndex) => {
-                    const text = formatEng(allStats[ch][rowKey], 'V', 3);
-                    colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width);
-                });
-            });
-
-            for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; }
+            if (min === Infinity) { min = -1; max = 1;}
+            const margin = (max - min) * 0.1 || 1;
             
-            const tableWidth = colWidths.reduce((a, b) => a + b, 0);
-            const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding);
-            if (!x && !y) return { width: tableWidth, height: tableHeight };
-
-            context.fillStyle = colors.bg;
-            context.fillRect(x, y, tableWidth, tableHeight);
-            context.strokeStyle = colors.grid;
-            context.lineWidth = 1;
-            context.strokeRect(x, y, tableWidth, tableHeight);
-
-            let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2);
-            rows.forEach((rowKey, rowIndex) => {
-                let currentX = x;
-                context.fillStyle = colors.text;
-                context.textAlign = 'left';
-                context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY);
-                currentX += colWidths[0];
-                
-                context.textAlign = 'right';
-                visibleChannels.forEach((ch, chIndex) => {
-                    const text = formatEng(allStats[ch][rowKey], 'V', 3);
-                    context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color;
-                    context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY);
-                    currentX += colWidths[chIndex + 1];
-                });
-                currentY += lineHeight;
+            s.view = { startIndex: 0, endIndex: s.metadata.numPoints };
+            Object.values(s.channelInfo).forEach(chInfo => {
+                chInfo.vMin = min - margin;
+                chInfo.vMax = max + margin;
             });
+            updateControlsFromView(s);
+            draw();
+        }
+        function fitYToAllVisible() {
+            const s=getActiveState(); if (!s) return;
+            let min = Infinity, max = -Infinity;
+            const start = Math.floor(s.view.startIndex), end = Math.ceil(s.view.endIndex);
+            
+            const visibleChannels = getVisibleChannels(s);
+            if(visibleChannels.length === 0) return;
 
-            let currentX = x + colWidths[0];
-            for(let i = 1; i < colWidths.length; i++) {
-                context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke();
-                currentX += colWidths[i];
+            visibleChannels.forEach(c => {
+                const data = s.waveforms[c];
+                for (let i = start; i < end; i++) {
+                    const v = data[i];
+                    if (v < min) min = v;
+                    if (v > max) max = v;
+                }
+            });
+            if (min === Infinity) return;
+            const margin = (max - min) * 0.1 || 1;
+            
+            visibleChannels.forEach(c => {
+                s.channelInfo[c].vMin = min - margin;
+                s.channelInfo[c].vMax = max + margin;
+            });
+            updateControlsFromView(s);
+            draw();
+        }
+        function fitYToChannel(channelId) {
+            const s = getActiveState(); if (!s || !s.waveforms[channelId]) return;
+            let min = Infinity, max = -Infinity;
+            const start = Math.max(0, Math.floor(s.view.startIndex)), end = Math.min(s.metadata.numPoints, Math.ceil(s.view.endIndex));
+            const data = s.waveforms[channelId];
+
+            for (let i = start; i < end; i++) {
+                const v = data[i];
+                if (v < min) min = v;
+                if (v > max) max = v;
             }
-            return { width: tableWidth, height: tableHeight };
+            if (min === Infinity) return;
+            const margin = (max - min) * 0.1 || 0.1;
+            const chInfo = s.channelInfo[channelId];
+            chInfo.vMin = min - margin;
+            chInfo.vMax = max + margin;
+            updateControlsFromView(s);
+            draw();
         }
-        function drawStats(plotArea, state) {
-            if (!state || !state.waveforms.channel1) return;
-            drawStatsTable(ctx, state, {
-                x: plotArea.x + 10, y: plotArea.y + 10, isExport: false,
-                colors: { bg: 'rgba(0, 0, 0, 0.6)', grid: '#555555', text: '#fff' }
-            });
-        }
-        function drawMeasurementBox(plotArea, view) { drawDragRectangle(); const {x: t1, y: v2} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, view); const {x: t2, y: v1} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, view); const dt = (t2 - t1) * TIME_PER_POINT, dV = (v2 - v1) * VOLTS_PER_BYTE, freq = dt > 0 ? 1 / dt : 0; const state = getActiveState(); ctx.fillStyle = state.annotationMode ? '#ffc107' : '#fff'; ctx.font = '14px Consolas'; ctx.textAlign = 'left'; const tX = Math.max(dragStart.x, dragEnd.x) + 5, tY = Math.max(dragStart.y, dragEnd.y); ctx.fillText(`Δt: ${formatEng(dt,'s')}`, tX, tY - 30); ctx.fillText(`1/Δt: ${formatEng(freq,'Hz')}`, tX, tY - 15); ctx.fillText(`ΔV: ${formatEng(dV,'V')}`, tX, tY); }
-        function drawCursors(context, plotArea, cursors, view) { context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = '#f0ad4e'; const x1_s = dataToScreen({x: cursors.x1, y: 0}, view).x, x2_s = dataToScreen({x: cursors.x2, y: 0}, view).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = '#32f0ad'; const y1_s = dataToScreen({x: 0, y: cursors.y1}, view).y, y2_s = dataToScreen({x: 0, y: cursors.y2}, view).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(cursors); }
-        function drawAnnotations(context, targetView, plotArea, dataToScreenFunc, annotations) {
-            const handleSize = 8;
-            annotations.forEach((box, index) => {
-                const p1 = dataToScreenFunc({x: box.t1, y: box.v1}, targetView);
-                const p2 = dataToScreenFunc({x: box.t2, y: box.v2}, targetView);
-                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-                const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y);
-                const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index;
-                context.strokeStyle = isSelected ? '#ffffff' : '#ffc107';
-                context.fillStyle = 'rgba(255, 193, 7, 0.15)';
-                context.lineWidth = isSelected ? 2 : 1;
-                context.fillRect(x, y, w, h);
-                context.strokeRect(x, y, w, h);
-                
-                const dt = (box.t2 - box.t1) * TIME_PER_POINT, dV = (box.v2 - box.v1) * VOLTS_PER_BYTE;
-                context.fillStyle = isSelected ? '#ffffff' : '#ffc107';
-                context.font = '10pt "Times New Roman"';
-                context.textAlign = 'left';
-
-                const placeTextOutside = (y + h > plotArea.y + plotArea.height - 30) || h < 35;
-                let textY, textBaseline;
-                if (placeTextOutside) { textY = y - 5; textBaseline = 'bottom'; } 
-                else { textY = y + 5; textBaseline = 'top'; }
-                
-                context.textBaseline = textBaseline;
-                context.fillText(`Δt: ${formatEng(dt, 's')}`, x + 5, textY);
-                context.fillText(`ΔV: ${formatEng(dV, 'V')}`, x + 5, textY + (placeTextOutside ? -15 : 15));
-                
-                if(isSelected && context === ctx){
-                    context.fillStyle = '#ffffff';
-                    context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
-                    context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize);
-                    context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
-                    context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
+        function updateControlsFromView(state){
+            if (!state) return;
+            const timeRange = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
+            if (timeRange > 0) {
+                 document.getElementById('timeScale').value = formatEng(timeRange / X_DIVS, 's');
+            }
+            
+            Object.keys(state.channelInfo).forEach(chId => {
+                const input = document.getElementById(`${chId}_vscale`);
+                if (input) {
+                    const chInfo = state.channelInfo[chId];
+                    const vRange = chInfo.vMax - chInfo.vMin;
+                    input.value = formatEng(vRange / Y_DIVS, chInfo.units);
                 }
             });
         }
-        function drawTextAnnotations(context, targetView, plotArea, dataToScreenFunc, textAnnotations) {
-             textAnnotations.forEach((ann, index) => {
-                const pos = dataToScreenFunc({x: ann.x, y: ann.y}, targetView);
-                const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index;
-                context.font = '14px Segoe UI';
-                const textWidth = context.measureText(ann.text).width;
-                context.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22);
-                if (isSelected && context === ctx) {
-                    context.strokeStyle = '#00bcf2';
-                    context.lineWidth = 2;
-                    context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22);
-                }
-                context.fillStyle = '#f0ad4e';
-                context.textAlign = 'left';
-                context.textBaseline = 'middle';
-                context.fillText(ann.text, pos.x + 5, pos.y - 7);
+        function updateChannelScaleControls(state) {
+            const container = document.getElementById('voltageScaleContainer');
+            container.innerHTML = '';
+            if (!state) return;
+
+            Object.keys(state.channelInfo).forEach(chId => {
+                const chNum = chId.replace('channel', '');
+                const chInfo = state.channelInfo[chId];
+                const item = document.createElement('div');
+                item.className = 'control-item';
+                item.innerHTML = `<span class="control-label">Ch ${chNum} (${chInfo.units}/div)</span><input type="text" class="control-input" id="${chId}_vscale" data-channel="${chId}">`;
+                container.appendChild(item);
+
+                const input = item.querySelector('input');
+                input.addEventListener('change', (e) => {
+                    const s = getActiveState();
+                    if (!s) return;
+                    
+                    const newVScale = parseEng(e.target.value);
+                    const targetChId = e.target.dataset.channel;
+                    const chInfo = s.channelInfo[targetChId];
+
+                    if (!isNaN(newVScale) && newVScale > 0 && chInfo) {
+                        const newVSpan = newVScale * Y_DIVS;
+                        const vCenter = chInfo.vMin + (chInfo.vMax - chInfo.vMin) / 2;
+                        chInfo.vMin = vCenter - newVSpan / 2;
+                        chInfo.vMax = vCenter + newVSpan / 2;
+                        draw();
+                        updateControlsFromView(s);
+                    } else {
+                        updateControlsFromView(s);
+                    }
+                });
             });
         }
-
-        // --- UI UPDATES & STATE MANAGEMENT ---
-        function fullResetView(){const s=getActiveState();if(!s||!s.waveforms.channel1)return;let min=255,max=0;s.drawOrder.filter(c=>s.channelInfo[c].visible&&s.waveforms[c]).forEach(c=>{const d=s.waveforms[c];for(let v of d){if(v<min)min=v;if(v>max)max=v}});min-=127;max-=127;const m=(max-min)*0.1;s.view={startIndex:0,endIndex:s.waveforms.channel1.length,vMin:min-m-10||-10,vMax:max+m+10||10};isYFitted=false;updateControlsFromView(s);draw()}
-        function fitYToView() {const s=getActiveState();if(!s||!s.waveforms.channel1)return;let min=255,max=0;const start=Math.floor(s.view.startIndex),end=Math.ceil(s.view.endIndex);s.drawOrder.filter(c=>s.channelInfo[c].visible&&s.waveforms[c]).forEach(c=>{const d=s.waveforms[c];for(let i=start;i<end;i++){const v=d[i];if(v<min)min=v;if(v>max)max=v}});if(min===255&&max===0)return;min-=127;max-=127;const m=(max-min)*0.1||10;s.view.vMin=min-m;s.view.vMax=max+m;isYFitted=true;updateControlsFromView(s);draw()}
-        function updateControlsFromView(state){if(!state || !state.waveforms.channel1)return;const vRange=(state.view.vMax-state.view.vMin);const tRange=(state.view.endIndex-state.view.startIndex);if(vRange===0||tRange===0)return;document.getElementById('voltageScale').value=formatEng((vRange*VOLTS_PER_BYTE)/Y_DIVS,'V');document.getElementById('timeScale').value=formatEng((tRange*TIME_PER_POINT)/X_DIVS,'s')}
-        function updateCursorReadouts(cursors) { const t1 = cursors.x1 * TIME_PER_POINT, t2 = cursors.x2 * TIME_PER_POINT; const v1 = cursors.y1 * VOLTS_PER_BYTE, v2 = cursors.y2 * VOLTS_PER_BYTE; const dt = Math.abs(t2 - t1), dv = Math.abs(v2 - v1); const freq = dt > 0 ? 1 / dt : 0; document.getElementById('deltaX').value = formatEng(dt, 's'); document.getElementById('deltaFreq').value = formatEng(freq, 'Hz'); document.getElementById('deltaY').value = formatEng(dv, 'V'); document.getElementById('t1').value = formatEng(t1, 's'); document.getElementById('t2').value = formatEng(t2, 's'); document.getElementById('v1').value = formatEng(v1, 'V'); document.getElementById('v2').value = formatEng(v2, 'V'); }
-        function calculateStats(data, view) {
-            let min = 255, max = 0, sum = 0, sumSq = 0;
+        function updateCursorReadouts(state) { 
+            const { cursors } = state;
+            const { x1, x2, y1, y2 } = cursors;
+            const dt = Math.abs(x2 - x1), dv = Math.abs(y2 - y1);
+            const freq = dt > 0 ? 1 / dt : 0;
+            const firstChannel = getVisibleChannels(state)[0];
+            const unit = firstChannel ? state.channelInfo[firstChannel].units : 'V';
+            document.getElementById('cursorYUnit').textContent = unit;
+            document.getElementById('deltaX').value = formatEng(dt, 's'); 
+            document.getElementById('deltaFreq').value = formatEng(freq, 'Hz'); 
+            document.getElementById('deltaY').value = formatEng(dv, unit); 
+            document.getElementById('t1').value = formatEng(x1, 's'); 
+            document.getElementById('t2').value = formatEng(x2, 's'); 
+            document.getElementById('v1').value = formatEng(y1, unit); 
+            document.getElementById('v2').value = formatEng(y2, unit); 
+        }
+        function calculateStats(state, ch) {
+            const { view, waveforms } = state;
+            const data = waveforms[ch];
+            let min = Infinity, max = -Infinity, sum = 0, sumSq = 0;
             const s = Math.floor(view.startIndex), e = Math.ceil(view.endIndex);
             const count = e - s;
             if (count <= 0) return { min: NaN, max: NaN, avg: NaN, rms: NaN };
 
             for (let i = s; i < e; i++) {
-                const rawVal = data[i];
-                if (rawVal !== undefined) {
-                    if (rawVal < min) min = rawVal;
-                    if (rawVal > max) max = rawVal;
-                    const voltVal = (rawVal - 127) * VOLTS_PER_BYTE;
+                const voltVal = data[i];
+                if (voltVal !== undefined && !isNaN(voltVal)) {
+                    if (voltVal < min) min = voltVal;
+                    if (voltVal > max) max = voltVal;
                     sum += voltVal;
                     sumSq += voltVal * voltVal;
                 }
             }
-            const avg = sum / count;
-            const rms = Math.sqrt(sumSq / count);
-            return {
-                min: (min - 127) * VOLTS_PER_BYTE,
-                max: (max - 127) * VOLTS_PER_BYTE,
-                avg: avg,
-                rms: rms
-            };
+            return { min, max, avg: sum / count, rms: Math.sqrt(sumSq / count) };
         }
 
-        // --- FILE & TAB HANDLING ---
         function handleFileSelect(e) { for (const file of e.target.files) { if(file.name.toLowerCase().endsWith('.wfm')) loadFile(file); } e.target.value = ''; }
-        function loadFile(file) {
+        
+        async function loadFile(file) {
             statusText.textContent=`Loading ${file.name}...`;
             const reader = new FileReader();
-            reader.onload = e => {
+            reader.onload = async (e) => {
                 try {
-                    const dataCh1 = new Uint8Array(e.target.result, 10);
-                    const dataCh2 = new Uint8Array(dataCh1.length);
-                    for (let i = 1; i < dataCh1.length; i++) { dataCh2[i] = 127 + (dataCh1[i] - dataCh1[i - 1]) * 4; }
-                    dataCh2[0] = 127;
-
-                    const newState = createDefaultTabState(file.name);
-                    newState.waveforms.channel1 = dataCh1;
-                    newState.waveforms.channel2 = dataCh2;
+                    const arrayBuffer = e.target.result;
+                    let parser = null;
+                    const view = new DataView(arrayBuffer);
+                    let versionString = '';
+                    if (arrayBuffer.byteLength > 10) {
+                        for (let i = 0; i < 8; i++) {
+                            const charCode = view.getUint8(2 + i);
+                            if (charCode === 0) break;
+                            versionString += String.fromCharCode(charCode);
+                        }
+                    }
                     
+                    if (versionString.startsWith(':WFM#00')) {
+                        parser = new TekWfmParser(arrayBuffer);
+                    } else if (arrayBuffer.byteLength > 2 && view.getUint16(0, true) === 0xA5A5) {
+                        parser = new RigolWfmParser(arrayBuffer);
+                    } else {
+                        throw new Error("Invalid or unsupported WFM file format.");
+                    }
+
+                    if (!parser.isValid()) {
+                        throw new Error("Invalid or unsupported WFM file format (parser validation failed).");
+                    }
+                    
+                    const loadOptions = await showLoadOptionsModal(parser, file.name);
+
+                    if (!loadOptions) {
+                        statusText.textContent = 'File load cancelled.';
+                        return;
+                    }
+                    
+                    const newState = createDefaultTabState(file.name, parser, loadOptions.overrides);
                     const newIndex = tabStates.length;
                     tabStates.push(newState);
                     addTabToUI(file.name, newIndex);
                     switchToTab(newIndex);
+                    fitYToAllVisible();
                     statusText.textContent = `Loaded: ${file.name}`;
                 } catch(err) {
-                    statusText.textContent = "Error processing file.";
+                    statusText.textContent = `Error processing ${file.name}: ${err.message}`;
+                    console.error(err);
                 }
             };
             reader.readAsArrayBuffer(file);
+        }
+
+        function showLoadOptionsModal(parser, fileName) {
+            const modal = document.getElementById('loadOptionsModal');
+            const infoDiv = document.getElementById('loadOptionsInfo');
+            const channelsDiv = document.getElementById('loadOptionsChannels');
+            document.getElementById('loadOptionsFileName').textContent = fileName;
+            infoDiv.innerHTML = '';
+            channelsDiv.innerHTML = '';
+
+            let infoHtml = '';
+            if (parser instanceof RigolWfmParser) {
+                infoHtml += `<div><span>Format:</span> <span>Rigol</span></div>`;
+                infoHtml += `<div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
+                for (let i = 1; i <= 4; i++) {
+                    if (parser.isChannelWritten(i)) {
+                        const chKey = `channel${i}`;
+                        const lastMultiplier = lastRigolMultiplier[chKey] || 1000;
+                        channelsDiv.innerHTML += `
+                            <div class="load-options-channel-item">
+                                <h4>Channel ${i}</h4>
+                                <div class="control-item">
+                                    <span class="control-label">Detected V/div:</span>
+                                    <span style="font-family: Consolas;">${formatEng(parser.getVoltageScale(i), 'V')}</span>
+                                </div>
+                                <div class="control-item">
+                                    <span class="control-label">Detected Offset:</span>
+                                    <span style="font-family: Consolas;">${formatEng(parser.getVoltageOffset(i), 'V')}</span>
+                                </div>
+                                <div class="control-item">
+                                    <label for="ch${i}_multiplier" class="control-label"><b>Scale Multiplier:</b></label>
+                                    <input type="number" id="ch${i}_multiplier" data-channel="${chKey}" class="control-input" value="${lastMultiplier}" style="width:80px;">
+                                </div>
+                            </div>`;
+                    }
+                }
+            } else {
+                 infoHtml += `<div><span>Format:</span> <span>Tektronix</span></div>`;
+                 infoHtml += `<div><span>User V/div:</span> <span>${formatEng(parser.getUserVoltsPerDiv(), 'V')}</span></div>`;
+                 infoHtml += `<div><span>User V Offset:</span> <span>${parser.getUserVerticalOffset().toFixed(3)} div</span></div>`;
+            }
+            infoDiv.innerHTML = infoHtml;
+            
+            modal.style.display = 'flex';
+
+            return new Promise(resolve => {
+                const confirmBtn = document.getElementById('loadOptionsConfirm');
+                const cancelBtn = document.getElementById('loadOptionsCancel');
+                const closeBtn = modal.querySelector('.modal-close');
+
+                const onConfirm = () => {
+                    const overrides = {};
+                    const multiplierInputs = channelsDiv.querySelectorAll('input[type="number"]');
+                    multiplierInputs.forEach(input => {
+                        const chKey = input.dataset.channel;
+                        const multiplier = parseFloat(input.value) || 1;
+                        overrides[chKey] = { multiplier };
+                        lastRigolMultiplier[chKey] = multiplier;
+                    });
+                    cleanup();
+                    resolve({ overrides });
+                };
+
+                const onCancel = () => {
+                    cleanup();
+                    resolve(null);
+                };
+                
+                const cleanup = () => {
+                    modal.style.display = 'none';
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    closeBtn.removeEventListener('click', onCancel);
+                };
+
+                confirmBtn.addEventListener('click', onConfirm);
+                cancelBtn.addEventListener('click', onCancel);
+                closeBtn.addEventListener('click', onCancel);
+            });
         }
 
         function addTabToUI(fileName, index) {
@@ -597,12 +989,7 @@
             tab.dataset.index = index;
             tab.innerHTML = `<span class="tab-name" title="${fileName}">${fileName}</span><span class="tab-close">&times;</span>`;
             tab.addEventListener('click', (e) => {
-                if (e.target.classList.contains('tab-close')) {
-                    e.stopPropagation();
-                    closeTab(index);
-                } else {
-                    switchToTab(index);
-                }
+                if (e.target.classList.contains('tab-close')) { e.stopPropagation(); closeTab(index); } else { switchToTab(index); }
             });
             tabContainer.appendChild(tab);
         }
@@ -610,13 +997,11 @@
         function switchToTab(index) {
             if (index < 0 || index >= tabStates.length) return;
             activeTabIndex = index;
-
             document.querySelectorAll('.tab-item').forEach(tab => {
                 tab.classList.toggle('active', parseInt(tab.dataset.index) === index);
             });
-            
             updateUIFromState();
-            fullResetView();
+            draw();
         }
 
         function closeTab(index) {
@@ -643,108 +1028,294 @@
         
         function updateUIFromState() {
             const state = getActiveState();
+            const fileDetailsPanel = document.getElementById('fileDetailsPanel');
+
+            updateChannelScaleControls(state);
             if (!state) {
                 document.getElementById('fileInfo').innerHTML = `<div>Drop a file or click Load</div><div>Points: -</div>`;
-                ['timeScale', 'voltageScale', 'deltaX', 'deltaFreq', 'deltaY', 't1', 't2', 'v1', 'v2'].forEach(id => document.getElementById(id).value = '-');
+                ['timeScale', 'deltaX', 'deltaFreq', 'deltaY', 't1', 't2', 'v1', 'v2'].forEach(id => document.getElementById(id).value = '-');
                 document.getElementById('cursorPanel').style.display = 'none';
                 document.getElementById('cursorBtn').classList.remove('active');
                 document.getElementById('annotateBtn').classList.remove('active');
                 document.getElementById('clearAnnotationsBtn').style.display = 'none';
+                fileDetailsPanel.style.display = 'none';
+                setupChannelUI(null);
                 return;
             }
             
-            document.getElementById('fileInfo').innerHTML = `<div>${state.fileName}</div><div>Points: ${state.waveforms.channel1.length}</div>`;
-            document.getElementById('ch1NameInput').value = state.channelInfo.channel1.name;
-            document.getElementById('ch2NameInput').value = state.channelInfo.channel2.name;
-            document.querySelector('.channel-button[data-channel="channel1"]').classList.toggle('active', state.channelInfo.channel1.visible);
-            document.querySelector('.channel-button[data-channel="channel2"]').classList.toggle('active', state.channelInfo.channel2.visible);
-            document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)'; 
-            document.querySelector(`.channel-button[data-channel="${state.drawOrder[1]}"] .ch-order`).textContent='(Front)';
+            document.getElementById('fileInfo').innerHTML = `<div>${state.fileName}</div><div>Points: ${state.metadata.numPoints}</div>`;
+            setupChannelUI(state);
             document.getElementById('cursorBtn').classList.toggle('active', state.cursors.enabled);
             document.getElementById('cursorPanel').style.display = state.cursors.enabled ? 'block' : 'none';
-            if(state.cursors.enabled) updateCursorReadouts(state.cursors);
-            document.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`).checked = true;
+            if(state.cursors.enabled) updateCursorReadouts(state);
             document.getElementById('annotateBtn').classList.toggle('active', state.annotationMode || textAnnotationMode);
             document.getElementById('clearAnnotationsBtn').style.display = (state.annotationMode || textAnnotationMode) ? 'flex' : 'none';
-            
-            const showStats = document.getElementById('showStatsCheckbox').checked;
-            document.getElementById('measurement-controls').style.display = showStats ? 'block' : 'none';
-
+            document.getElementById('measurement-controls').style.display = document.getElementById('showStatsCheckbox').checked ? 'block' : 'none';
             updateControlsFromView(state);
+
+            updateFileDetailsPanel(state.parser);
+            fileDetailsPanel.style.display = 'block';
         }
 
-        // --- EVENT HANDLERS ---
-        function getInteractionAtPos(pos) { const state=getActiveState(); if(!state) return {type:null}; for(let i=state.textAnnotations.length-1;i>=0;i--){const ann=state.textAnnotations[i];const screenPos=dataToScreen({x:ann.x,y:ann.y},state.view);ctx.font='14px Segoe UI';const textWidth=ctx.measureText(ann.text).width;if(pos.x>=screenPos.x&&pos.x<=screenPos.x+textWidth+10&&pos.y>=screenPos.y-18&&pos.y<=screenPos.y+4){return{type:'textAnnotation',index:i,handle:'body'}}}const handleSize=8,tol=handleSize/2;for(let i=state.annotations.length-1;i>=0;i--){const box=state.annotations[i];const p1=dataToScreen({x:box.t1,y:box.v1},state.view),p2=dataToScreen({x:box.t2,y:box.v2},state.view);const x=Math.min(p1.x,p2.x),y=Math.min(p1.y,p2.y),w=Math.abs(p1.x-p2.x),h=Math.abs(p1.y-p2.y);const isSelected=activeInteraction.type==='annotation'&&activeInteraction.index===i;if(isSelected){if(Math.abs(pos.x-x)<tol&&Math.abs(pos.y-y)<tol)return{type:'annotation',index:i,handle:'tl'};if(Math.abs(pos.x-(x+w))<tol&&Math.abs(pos.y-y)<tol)return{type:'annotation',index:i,handle:'tr'};if(Math.abs(pos.x-x)<tol&&Math.abs(pos.y-(y+h))<tol)return{type:'annotation',index:i,handle:'bl'};if(Math.abs(pos.x-(x+w))<tol&&Math.abs(pos.y-(y+h))<tol)return{type:'annotation',index:i,handle:'br'}}if(pos.x>x&&pos.x<x+w&&pos.y>y&&pos.y<y+h)return{type:'annotation',index:i,handle:'body'}}if(state.cursors.enabled){const x1_s=dataToScreen({x:state.cursors.x1,y:0},state.view).x,x2_s=dataToScreen({x:state.cursors.x2,y:0},state.view).x;const y1_s=dataToScreen({x:0,y:state.cursors.y1},state.view).y,y2_s=dataToScreen({x:0,y:state.cursors.y2},state.view).y;if(Math.abs(pos.x-x1_s)<tol)return{type:'cursor',handle:'x1'};if(Math.abs(pos.x-x2_s)<tol)return{type:'cursor',handle:'x2'};if(Math.abs(pos.y-y1_s)<tol)return{type:'cursor',handle:'y1'};if(Math.abs(pos.y-y2_s)<tol)return{type:'cursor',handle:'y2'}}return{type:null}}
+        function updateFileDetailsPanel(parser) {
+            const contentDiv = document.getElementById('fileDetailsContent');
+            contentDiv.innerHTML = '';
+            let details = '';
+
+            if (parser instanceof TekWfmParser) {
+                details += `<div><span>Format:</span> <span>Tektronix</span></div>`;
+                details += `<div><span>Version:</span> <span>${parser.getString(2, 8).trim()}</span></div>`;
+                details += `<div><span>Endian:</span> <span>${parser.littleEndian ? 'Little' : 'Big'}</span></div>`;
+                details += `<div><span>Time/Point:</span> <span>${formatEng(parser.getTimeScale(), 's')}</span></div>`;
+                details += `<div><span>V Units:</span> <span>${parser.getVoltageUnits()}</span></div>`;
+                details += `<div><span>V Scale:</span> <span>${parser.getFloat64(166).toExponential(4)}</span></div>`;
+                details += `<div><span>V Offset:</span> <span>${formatEng(parser.getFloat64(174), 'V')}</span></div>`;
+                details += `<hr>`;
+                details += `<div><span>User V/div:</span> <span>${formatEng(parser.getUserVoltsPerDiv(), 'V')}</span></div>`;
+                details += `<div><span>User V Offset:</span> <span>${parser.getUserVerticalOffset().toFixed(3)} div</span></div>`;
+            } else if (parser instanceof RigolWfmParser) {
+                details += `<div><span>Format:</span> <span>Rigol</span></div>`;
+                details += `<div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
+                for (let i = 1; i <= 4; i++) {
+                    if (parser.isChannelWritten(i)) {
+                        details += `<hr>`;
+                        details += `<div><span>Channel ${i} (Header):</span> <span></span></div>`;
+                        details += `<div><span>&nbsp;&nbsp;V/div:</span> <span>${formatEng(parser.getVoltageScale(i), 'V')}</span></div>`;
+                        details += `<div><span>&nbsp;&nbsp;V Offset:</span> <span>${formatEng(parser.getVoltageOffset(i), 'V')}</span></div>`;
+                    }
+                }
+            }
+            contentDiv.innerHTML = details;
+        }
+
+        function setupChannelUI(state) {
+            const btnContainer = document.getElementById('channelButtonContainer');
+            const legendContainer = document.getElementById('channelLegendContainer');
+            const cursorContainer = document.getElementById('cursorTrackContainer');
+
+            btnContainer.innerHTML = '';
+            legendContainer.innerHTML = '';
+            cursorContainer.innerHTML = '<label><input type="radio" name="cursorTrack" value="null" checked> None</label>';
+
+            if (!state) return;
+
+            for (const chId in state.channelInfo) {
+                const chNum = chId.replace('channel', '');
+                const info = state.channelInfo[chId];
+                
+                const btn = document.createElement('button');
+                btn.className = `channel-button ch${chNum}`;
+                btn.classList.toggle('active', info.visible);
+                btn.dataset.channel = chId;
+                btn.innerHTML = `<span class="ch-name"><i class="fas fa-wave-square" style="color: ${info.color}"></i> Channel ${chNum}</span><span class="ch-order"></span>`;
+                btn.addEventListener('click', e => {
+                    const s = getActiveState(); if (!s) return;
+                    e.currentTarget.classList.toggle('active');
+                    s.channelInfo[chId].visible = e.currentTarget.classList.contains('active');
+                    draw();
+                });
+                btnContainer.appendChild(btn);
+
+                const legendItem = document.createElement('div');
+                legendItem.className = 'control-item';
+                legendItem.innerHTML = `<label for="ch${chNum}NameInput" class="control-label">Ch ${chNum} Legend</label><input type="text" id="ch${chNum}NameInput" value="${info.name}" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">`;
+                legendItem.querySelector('input').addEventListener('input', e => {
+                    const s = getActiveState();
+                    if (s) s.channelInfo[chId].name = e.target.value || `Channel ${chNum}`;
+                });
+                legendContainer.appendChild(legendItem);
+
+                const radioLabel = document.createElement('label');
+                radioLabel.innerHTML = `<input type="radio" name="cursorTrack" value="${chId}"> CH${chNum}`;
+                radioLabel.querySelector('input').addEventListener('change', e => {
+                    const s = getActiveState(); if (s) { s.cursors.trackingChannel = e.target.value; trackCursors(); draw(); }
+                });
+                cursorContainer.appendChild(radioLabel);
+            }
+            
+            if (state.drawOrder.length > 0) {
+                 document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)';
+                 if (state.drawOrder.length > 1) {
+                    document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
+                 }
+            }
+            const radioToCheck = cursorContainer.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`);
+            if (radioToCheck) radioToCheck.checked = true;
+        }
+
+        function hitTestWaveform(mousePos, state) {
+            const {x: mouseX, y: mouseY} = mousePos;
+            const {view, waveforms, channelInfo, drawOrder, metadata} = state;
+
+            for (const ch of [...drawOrder].reverse()) {
+                if (!channelInfo[ch].visible || !waveforms[ch]) continue;
+                
+                const {time} = screenToData({x: mouseX, y: mouseY}, view, state, ch);
+                const dataIndex = Math.round(time / metadata.timePerPoint);
+
+                if (dataIndex >= 0 && dataIndex < waveforms[ch].length) {
+                    const waveformVoltage = waveforms[ch][dataIndex];
+                    const screenY = dataToScreen({time: 0, voltage: waveformVoltage}, view, state, ch).y;
+                    if (Math.abs(mouseY - screenY) < 5) {
+                        return ch;
+                    }
+                }
+            }
+            return null;
+        }
+        function getInteractionAtPos(pos, state) {
+            const handleSize = 8, tol = handleSize/2;
+            const refCh = getVisibleChannels(state)[0];
+
+            for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
+                const ann = state.textAnnotations[i];
+                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, refCh);
+                ctx.font = '14px Segoe UI';
+                const textWidth = ctx.measureText(ann.text).width;
+                if (pos.x >= screenPos.x && pos.x <= screenPos.x + textWidth + 10 && pos.y >= screenPos.y - 18 && pos.y <= screenPos.y + 4) { return { type: 'textAnnotation', index: i, handle: 'body' }; }
+            }
+            for (let i = state.annotations.length - 1; i >= 0; i--) {
+                const box = state.annotations[i];
+                const p1 = dataToScreen({time: box.t1, voltage: box.v1}, state.view, state, refCh);
+                const p2 = dataToScreen({time: box.t2, voltage: box.v2}, state.view, state, refCh);
+                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y);
+                const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === i;
+                if (isSelected) {
+                    if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - y) < tol) return { type: 'annotation', index: i, handle: 'tl' };
+                    if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - y) < tol) return { type: 'annotation', index: i, handle: 'tr' };
+                    if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - (y + h)) < tol) return { type: 'annotation', index: i, handle: 'bl' };
+                    if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - (y + h)) < tol) return { type: 'annotation', index: i, handle: 'br' };
+                }
+                if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) return { type: 'annotation', index: i, handle: 'body' };
+            }
+            if (state.cursors.enabled) {
+                const x1_s = dataToScreen({time: state.cursors.x1, voltage: 0}, state.view, state, refCh).x;
+                const x2_s = dataToScreen({time: state.cursors.x2, voltage: 0}, state.view, state, refCh).x;
+                const y1_s = dataToScreen({time: 0, voltage: state.cursors.y1}, state.view, state, refCh).y;
+                const y2_s = dataToScreen({time: 0, voltage: state.cursors.y2}, state.view, state, refCh).y;
+                if (Math.abs(pos.x - x1_s) < tol) return { type: 'cursor', handle: 'x1' };
+                if (Math.abs(pos.x - x2_s) < tol) return { type: 'cursor', handle: 'x2' };
+                if (Math.abs(pos.y - y1_s) < tol) return { type: 'cursor', handle: 'y1' };
+                if (Math.abs(pos.y - y2_s) < tol) return { type: 'cursor', handle: 'y2' };
+            }
+            const hitChannel = hitTestWaveform(pos, state);
+            if (hitChannel) { return { type: 'channel-drag', channel: hitChannel }; }
+            return { type: null };
+        }
         
         canvas.addEventListener('mousedown', e => {
             const state = getActiveState(); if (!state) return;
             if (textAnnotationMode) { createTextAnnotationInput(e); return; }
-            isYFitted = false;
-
-            activeInteraction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY });
-            if (activeInteraction.type) {
-                isDragging = false; isPanning = false; draw();
+            
+            if (e.shiftKey) {
+                activeInteraction = { type: 'measure-drag' };
+                dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
                 return;
             }
 
-            if (zoomModeEnabled) {
-                isDragging = true; isPanning = false; isShiftPressed = false;
-                dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
-            } else if (e.shiftKey) {
-                isDragging = true; isPanning = false; isShiftPressed = true;
-                dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
+            const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+            activeInteraction = { ...interaction, startX: e.offsetX, startY: e.offsetY };
+            
+            if (interaction.type === 'channel-drag') {
+                const chInfo = state.channelInfo[interaction.channel];
+                activeInteraction.startVMin = chInfo.vMin;
+                activeInteraction.startVMax = chInfo.vMax;
+                isPanning = false;
+            } else if (interaction.type) {
+                isPanning = false;
+                draw();
             } else {
-                isPanning = true; isDragging = false; isShiftPressed = false;
-                panStart = { x: e.offsetX, y: e.offsetY, viewStart: state.view.startIndex, viewEnd: state.view.endIndex, vMin: state.view.vMin, vMax: state.view.vMax };
-                canvas.style.cursor = 'grabbing';
+                if (zoomModeEnabled) {
+                    activeInteraction.type = 'zoom-drag';
+                    dragStart = { x: e.offsetX, y: e.offsetY }; dragEnd = { ...dragStart };
+                } else {
+                    isPanning = true;
+                    const vRanges = {};
+                    getVisibleChannels(state).forEach(ch => {
+                        vRanges[ch] = { vMin: state.channelInfo[ch].vMin, vMax: state.channelInfo[ch].vMax };
+                    });
+                    const panningChannel = getChannelFromMousePosition({x: e.offsetX, y: e.offsetY}, state);
+                    panStart = { x: e.offsetX, y: e.offsetY, viewStart: state.view.startIndex, viewEnd: state.view.endIndex, vRanges: vRanges, panningChannel: panningChannel };
+                    canvas.style.cursor = 'grabbing';
+                }
             }
         });
         
         canvas.addEventListener('mousemove', e => {
             const state = getActiveState(); if (!state) return;
+            lastMousePos = {x: e.offsetX, y: e.offsetY};
+            const { type, channel, handle, index, startVMin, startVMax, startY } = activeInteraction;
 
-            if (activeInteraction.type) {
-                const currentDataPos = screenToData({ x: e.offsetX, y: e.offsetY }, state.view);
-                if (activeInteraction.type === 'cursor') {
-                    if (activeInteraction.handle.startsWith('x')) {
-                        state.cursors[activeInteraction.handle] = currentDataPos.x;
-                        trackCursors();
-                    } else {
-                        state.cursors[activeInteraction.handle] = currentDataPos.y;
-                    }
-                } else if (activeInteraction.type === 'textAnnotation') {
-                    state.textAnnotations[activeInteraction.index].x = currentDataPos.x;
-                    state.textAnnotations[activeInteraction.index].y = currentDataPos.y;
-                }
+            if (type === 'channel-drag') {
+                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
+                const dy = e.offsetY - startY;
+                const vRange = startVMax - startVMin;
+                const vPerPixel = vRange / plotArea.height;
+                const vDelta = dy * vPerPixel;
+                
+                const chInfo = state.channelInfo[channel];
+                chInfo.vMin = startVMin + vDelta;
+                chInfo.vMax = startVMax + vDelta;
+
                 draw();
                 return;
-            }
-            
-            if (isPanning) {
-                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight);
+            } else if (type === 'cursor') {
+                const { time, voltage } = screenToData({ x: e.offsetX, y: e.offsetY }, state.view, state);
+                if (handle.startsWith('x')) { state.cursors[handle] = time; trackCursors(); } else { state.cursors[handle] = voltage; }
+                draw();
+                return;
+            } else if (type === 'textAnnotation') {
+                 const { time, voltage } = screenToData({ x: e.offsetX, y: e.offsetY }, state.view, state);
+                 state.textAnnotations[index].time = time; state.textAnnotations[index].voltage = voltage;
+                 draw();
+                 return;
+            } else if (type === 'zoom-drag' || type === 'measure-drag') {
+                dragEnd = { x: e.offsetX, y: e.offsetY };
+                draw();
+            } else if (isPanning) {
+                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
                 const dx = e.offsetX - panStart.x;
+                const dy = e.offsetY - panStart.y;
+                
                 const indexPerPixel = (panStart.viewEnd - panStart.viewStart) / plotArea.width;
                 const indexShift = dx * indexPerPixel;
-                let newStart = panStart.viewStart - indexShift;
-                let newEnd = panStart.viewEnd - indexShift;
+                let newStart = panStart.viewStart - indexShift, newEnd = panStart.viewEnd - indexShift;
                 if (newStart < 0) { newEnd -= newStart; newStart = 0; }
-                if (newEnd > state.waveforms.channel1.length) { newStart -= (newEnd - state.waveforms.channel1.length); newEnd = state.waveforms.channel1.length; }
+                if (newEnd > state.metadata.numPoints) { newStart -= (newEnd - state.metadata.numPoints); newEnd = state.metadata.numPoints; }
                 if (newStart < 0) newStart = 0;
                 state.view.startIndex = newStart; state.view.endIndex = newEnd;
                 
-                const dy = e.offsetY - panStart.y;
-                const voltagePerPixel = (panStart.vMax - panStart.vMin) / plotArea.height;
-                const voltageShift = dy * voltagePerPixel;
-                state.view.vMin = panStart.vMin + voltageShift;
-                state.view.vMax = panStart.vMax + voltageShift;
+                if (displayOptions.separateView && panStart.panningChannel) {
+                    const ch = panStart.panningChannel;
+                    if (panStart.vRanges[ch]) {
+                        const chInfo = state.channelInfo[ch];
+                        const vRange = panStart.vRanges[ch].vMax - panStart.vRanges[ch].vMin;
+                        const totalPlotHeight = canvas.clientHeight - PADDING_STATIC.top - PADDING_STATIC.bottom;
+                        const individualPlotHeight = totalPlotHeight / getVisibleChannels(state).length;
+                        const vPerPixel = vRange / individualPlotHeight;
+                        const vDelta = dy * vPerPixel;
+                        chInfo.vMin = panStart.vRanges[ch].vMin + vDelta;
+                        chInfo.vMax = panStart.vRanges[ch].vMax + vDelta;
+                    }
+                } else if (!displayOptions.separateView) {
+                    getVisibleChannels(state).forEach((ch) => {
+                        if (panStart.vRanges[ch]) {
+                            const chInfo = state.channelInfo[ch];
+                            const vRange = panStart.vRanges[ch].vMax - panStart.vRanges[ch].vMin;
+                            const vPerPixel = vRange / plotArea.height;
+                            const vDelta = dy * vPerPixel;
+                            chInfo.vMin = panStart.vRanges[ch].vMin + vDelta;
+                            chInfo.vMax = panStart.vRanges[ch].vMax + vDelta;
+                        }
+                    });
+                }
 
                 updateControlsFromView(state); draw();
-            }
-            else if(isDragging) { dragEnd = { x: e.offsetX, y: e.offsetY }; draw(); }
-            else { 
-                const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY });
-                if (zoomModeEnabled) { canvas.style.cursor = 'zoom-in'; }
-                else if (textAnnotationMode) { canvas.style.cursor = 'text'; }
+            } else {
+                const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+                if (zoomModeEnabled) canvas.style.cursor = 'zoom-in';
+                else if (textAnnotationMode) canvas.style.cursor = 'text';
+                else if (interaction.type === 'channel-drag') canvas.style.cursor = 'ns-resize';
                 else if (interaction.type === 'annotation') canvas.style.cursor = interaction.handle === 'body' ? 'move' : 'pointer';
                 else if (interaction.type === 'textAnnotation') canvas.style.cursor = 'move';
                 else if (interaction.type === 'cursor') canvas.style.cursor = interaction.handle.startsWith('x') ? 'ew-resize' : 'ns-resize';
@@ -753,156 +1324,162 @@
         });
         
         canvas.addEventListener('mouseup', e => {
-            const state=getActiveState(); if (!state) return;
-            if (activeInteraction.type) { activeInteraction = { type: null }; draw(); return; }
-            
-            if (isPanning) {
-                isPanning = false;
-                canvas.style.cursor = zoomModeEnabled ? 'zoom-in' : 'grab';
-            }
+            const state = getActiveState(); if (!state) return;
 
-            if (isDragging) {
-                const dragWidth = Math.abs(dragEnd.x - dragStart.x);
-                const dragHeight = Math.abs(dragEnd.y - dragStart.y);
-
-                if (isShiftPressed) {
-                    if (state.annotationMode && dragWidth > 5) {
-                        const {x: t1_raw, y: v2_raw} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view);
-                        const {x: t2_raw, y: v1_raw} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view);
-                        state.annotations.push({ t1: t1_raw, v1: v1_raw, t2: t2_raw, v2: v2_raw });
+            const { type } = activeInteraction;
+            if (type === 'zoom-drag') {
+                if (Math.abs(dragEnd.x - dragStart.x) >= 10 && Math.abs(dragEnd.y - dragStart.y) >= 10) {
+                    const { time: t1 } = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: 0}, state.view, state);
+                    const { time: t2 } = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: 0}, state.view, state);
+                    const newStartIndex = Math.max(0, t1 / state.metadata.timePerPoint);
+                    const newEndIndex = Math.min(state.metadata.numPoints, t2 / state.metadata.timePerPoint);
+                    
+                    if (newEndIndex - newStartIndex >= 10) {
+                        state.view.startIndex = newStartIndex;
+                        state.view.endIndex = newEndIndex;
+                        getVisibleChannels(state).forEach(ch => {
+                           const { voltage: v2 } = screenToData({x:0, y: Math.min(dragStart.y, dragEnd.y)}, state.view, state, ch);
+                           const { voltage: v1 } = screenToData({x:0, y: Math.max(dragStart.y, dragEnd.y)}, state.view, state, ch);
+                           state.channelInfo[ch].vMin = v1;
+                           state.channelInfo[ch].vMax = v2;
+                        });
+                        updateControlsFromView(state);
                     }
-                } else if (zoomModeEnabled) {
-                    if (dragWidth >= 10 && dragHeight >= 10) {
-                        const { x: nStartI, y: nVMax } = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view);
-                        const { x: nEndI, y: nVMin } = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view);
-                        if (nEndI - nStartI >= 10) {
-                            state.view = { startIndex: nStartI, endIndex: nEndI, vMin: nVMin, vMax: nVMax };
-                            updateControlsFromView(state);
-                        }
-                    }
-                    zoomModeEnabled = false;
-                    statusText.textContent = `Loaded: ${state.fileName}`;
-                    canvas.style.cursor = 'grab';
                 }
-                
-                isDragging = false;
-                isShiftPressed = false;
-                draw();
+                zoomModeEnabled = false;
+                statusText.textContent = `Loaded: ${state.fileName}`;
+            } else if (type === 'measure-drag') {
+                if (state.annotationMode && Math.abs(dragEnd.x - dragStart.x) > 5) {
+                    const {time: t1, voltage: v2} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view, state);
+                    const {time: t2, voltage: v1} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view, state);
+                    state.annotations.push({ t1, v1, t2, v2 });
+                }
             }
+
+            isPanning = false;
+            activeInteraction = { type: null };
+            canvas.style.cursor = zoomModeEnabled ? 'zoom-in' : 'grab';
+            draw();
         });
         
         canvas.addEventListener('dblclick', fullResetView);
         
+        function getChannelFromMousePosition(pos, state) {
+            if (!state) return null;
+            const { x: mouseX, y: mouseY } = pos;
+            const { width, height } = canvas.getBoundingClientRect();
+            const visibleChannels = getVisibleChannels(state);
+            const PADDING = getDynamicPadding(state);
+
+            if (displayOptions.separateView) {
+                if (mouseY < PADDING.top || mouseY > height - PADDING.bottom || visibleChannels.length === 0) return null;
+                const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                const individualPlotHeight = totalPlotHeight / visibleChannels.length;
+                const plotIndex = Math.floor((mouseY - PADDING.top) / individualPlotHeight);
+                if (plotIndex >= 0 && plotIndex < visibleChannels.length) {
+                    return visibleChannels[plotIndex];
+                }
+            } else {
+                if (mouseX >= PADDING.left) return null;
+                const index = Math.floor((PADDING.left - 10 - mouseX) / Y_AXIS_WIDTH);
+                if (index >= 0 && index < visibleChannels.length) {
+                    return visibleChannels[index];
+                }
+            }
+            return null;
+        }
+
         canvas.addEventListener('wheel', e => {
             const state = getActiveState(); if (!state) return;
             e.preventDefault();
-            isYFitted = false;
             
-            const isOverYAxis = e.offsetX < PADDING.left || e.offsetX > canvas.clientWidth - PADDING.right;
-            const currentTRange = state.view.endIndex - state.view.startIndex;
-            const currentVRange = state.view.vMax - state.view.vMin;
+            const hoveredChannel = getChannelFromMousePosition({ x: e.offsetX, y: e.offsetY }, state);
+            
+            if (hoveredChannel) { // Y-Axis Zoom
+                const chInfo = state.channelInfo[hoveredChannel];
+                const z = e.deltaY < 0 ? 0.85 : 1.15;
+                let plotArea, mouseYRatio;
 
-            if (displayOptions.discreteZoom) {
-                const direction = e.deltaY < 0 ? -1 : 1; // -1 for zoom in, +1 for zoom out
-                
-                if (isOverYAxis) {
-                    const currentVScale = (currentVRange * VOLTS_PER_BYTE) / Y_DIVS;
-                    let closestIndex = 0;
-                    let minDiff = Infinity;
-                    STD_VOLT_SCALES.forEach((scale, index) => {
-                        const diff = Math.abs(Math.log(scale) - Math.log(currentVScale));
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            closestIndex = index;
-                        }
-                    });
-
-                    const newIndex = Math.max(0, Math.min(STD_VOLT_SCALES.length - 1, closestIndex + direction));
-                    const newVScale = STD_VOLT_SCALES[newIndex];
-                    const newVRange = (newVScale / VOLTS_PER_BYTE) * Y_DIVS;
-                    const pivotV = state.view.vMin + currentVRange / 2;
-                    state.view.vMin = pivotV - newVRange / 2;
-                    state.view.vMax = pivotV + newVRange / 2;
-
-                } else { // X-Axis snap zoom
-                    const currentTScale = (currentTRange * TIME_PER_POINT) / X_DIVS;
-                    let closestIndex = 0;
-                    let minDiff = Infinity;
-                     STD_TIME_SCALES.forEach((scale, index) => {
-                        const diff = Math.abs(Math.log(scale) - Math.log(currentTScale));
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            closestIndex = index;
-                        }
-                    });
-
-                    const newIndex = Math.max(0, Math.min(STD_TIME_SCALES.length - 1, closestIndex + direction));
-                    const newTScale = STD_TIME_SCALES[newIndex];
-                    const newTRange = (newTScale / TIME_PER_POINT) * X_DIVS;
-                    const pivotT = state.view.startIndex + currentTRange / 2;
-                    state.view.startIndex = pivotT - newTRange / 2;
-                    state.view.endIndex = pivotT + newTRange / 2;
+                if (displayOptions.separateView) {
+                    const visibleChannels = getVisibleChannels(state);
+                    const chIndex = visibleChannels.indexOf(hoveredChannel);
+                    if (chIndex === -1) return;
+                    const { width, height } = canvas.getBoundingClientRect();
+                    const PADDING = getDynamicPadding(state);
+                    const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                    const individualPlotHeight = totalPlotHeight / visibleChannels.length;
+                    plotArea = {
+                        x: PADDING.left,
+                        y: PADDING.top + chIndex * individualPlotHeight,
+                        width: width - PADDING.left - PADDING.right,
+                        height: individualPlotHeight
+                    };
+                    mouseYRatio = Math.max(0, Math.min(1, 1 - ((e.offsetY - plotArea.y) / plotArea.height)));
+                } else {
+                    plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
+                    mouseYRatio = Math.max(0, Math.min(1, 1 - ((e.offsetY - plotArea.y) / plotArea.height)));
                 }
 
-            } else { // Continuous Zoom
-                if (isOverYAxis) {
-                    const z = e.deltaY < 0 ? 0.85 : 1.15;
-                    const mouseYRatio = 1 - ((e.offsetY - PADDING.top) / (canvas.clientHeight - PADDING.top - PADDING.bottom));
-                    const pivotV = state.view.vMin + currentVRange * mouseYRatio;
-                    state.view.vMin = pivotV - (currentVRange * z * mouseYRatio);
-                    state.view.vMax = pivotV + (currentVRange * z * (1 - mouseYRatio));
+                const currentVRange = chInfo.vMax - chInfo.vMin;
+                const pivotV = chInfo.vMin + currentVRange * mouseYRatio;
+                chInfo.vMin = pivotV - (currentVRange * z * mouseYRatio);
+                chInfo.vMax = pivotV + (currentVRange * z * (1 - mouseYRatio));
+            } else { // X-Axis Zoom/Pan
+                 const currentTRange = state.view.endIndex - state.view.startIndex;
+                if (e.shiftKey) {
+                    const p = currentTRange * 0.1 * Math.sign(e.deltaY);
+                    state.view.startIndex += p; state.view.endIndex += p;
                 } else {
-                    if (e.shiftKey) { // Pan with Shift+Scroll
-                        const p = currentTRange * 0.1 * Math.sign(e.deltaY);
-                        state.view.startIndex += p;
-                        state.view.endIndex += p;
-                    } else { // Zoom X-Axis
-                        const z = e.deltaY < 0 ? 0.85 : 1.15;
-                        let mouseXRatio = (e.offsetX - PADDING.left) / (canvas.clientWidth - PADDING.left - PADDING.right);
-                        mouseXRatio = Math.max(0, Math.min(1, mouseXRatio));
-                        const pivotT = state.view.startIndex + currentTRange * mouseXRatio;
-                        state.view.startIndex = pivotT - (currentTRange * z * mouseXRatio);
-                        state.view.endIndex = pivotT + (currentTRange * z * (1 - mouseXRatio));
-                    }
+                    const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
+                    let mouseXRatio = (e.offsetX - plotArea.x) / plotArea.width;
+                    mouseXRatio = Math.max(0, Math.min(1, mouseXRatio));
+                    const z = e.deltaY < 0 ? 0.85 : 1.15;
+                    const pivotT = state.view.startIndex + currentTRange * mouseXRatio;
+                    state.view.startIndex = pivotT - (currentTRange * z * mouseXRatio);
+                    state.view.endIndex = pivotT + (currentTRange * z * (1 - mouseXRatio));
                 }
             }
 
             state.view.startIndex = Math.max(0, state.view.startIndex);
-            state.view.endIndex = Math.min(state.waveforms.channel1.length, state.view.endIndex);
+            state.view.endIndex = Math.min(state.metadata.numPoints, state.view.endIndex);
             if (state.view.endIndex - state.view.startIndex < 10) { state.view.endIndex = state.view.startIndex + 10; }
-            if (state.view.vMax - state.view.vMin < 1) { state.view.vMax = state.view.vMin + 1; }
+            
             updateControlsFromView(state);
             draw();
         }, { passive: false });
         
-        // --- Drag & Drop File Handlers ---
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => document.body.addEventListener(eventName, e => e.preventDefault()));
         ['dragenter', 'dragover'].forEach(eventName => document.body.addEventListener(eventName, () => { if (!isDraggingFile) { dragOverlay.style.display = 'flex'; isDraggingFile = true; } }));
         document.body.addEventListener('dragleave', (e) => { if (e.relatedTarget === null) { dragOverlay.style.display = 'none'; isDraggingFile = false; }});
         document.body.addEventListener('drop', e => { dragOverlay.style.display = 'none'; isDraggingFile = false; for (const file of e.dataTransfer.files) { if(file.name.toLowerCase().endsWith('.wfm')) loadFile(file); } });
         
-        // --- BUTTON & OTHER EVENT LISTENERS ---
         document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
         document.getElementById('fileInput').addEventListener('change', handleFileSelect);
         document.getElementById('resetViewBtn').addEventListener('click', fullResetView);
-        document.getElementById('swapOrderBtn').addEventListener('click', () => { const s=getActiveState(); if (!s) return; s.drawOrder.reverse(); document.querySelector(`.channel-button[data-channel="${s.drawOrder[0]}"] .ch-order`).textContent='(Back)'; document.querySelector(`.channel-button[data-channel="${s.drawOrder[1]}"] .ch-order`).textContent='(Front)'; draw(); });
-        document.querySelectorAll('.channel-button').forEach(btn => { btn.addEventListener('click', e => { const s=getActiveState(); if (!s) return; const ch=e.currentTarget.dataset.channel; e.currentTarget.classList.toggle('active'); s.channelInfo[ch].visible=e.currentTarget.classList.contains('active'); draw(); }); });
-        document.getElementById('ch1NameInput').addEventListener('input', e => { const s=getActiveState(); if (!s) return; s.channelInfo.channel1.name = e.target.value || 'Channel 1'; draw(); });
-        document.getElementById('ch2NameInput').addEventListener('input', e => { const s=getActiveState(); if (!s) return; s.channelInfo.channel2.name = e.target.value || 'Channel 2'; draw(); });
+        document.getElementById('swapOrderBtn').addEventListener('click', () => { const s=getActiveState(); if (!s) return; s.drawOrder.reverse(); setupChannelUI(s); draw(); });
         document.getElementById('showStatsCheckbox').addEventListener('change', e => { displayOptions.showStats = e.target.checked; document.getElementById('measurement-controls').style.display = e.target.checked ? 'block' : 'none'; draw(); });
         document.querySelectorAll('.meas-toggle').forEach(cb => cb.addEventListener('change', draw));
         document.getElementById('discreteZoomCheckbox').addEventListener('change', e => { displayOptions.discreteZoom = e.target.checked; });
         document.getElementById('relativeTimeCheckbox').addEventListener('change', e => { displayOptions.relativeTime = e.target.checked; draw(); });
-        document.getElementById('timeScale').addEventListener('change', e => { const state = getActiveState(); if (!state) return; const newTimeScalePerDiv = parseEng(e.target.value); if (isNaN(newTimeScalePerDiv) || newTimeScalePerDiv <= 0) { updateControlsFromView(state); return; } const newTimeSpan = newTimeScalePerDiv * X_DIVS; const newIndexRange = newTimeSpan / TIME_PER_POINT; const currentCenterIndex = (state.view.startIndex + state.view.endIndex) / 2; state.view.startIndex = Math.max(0, currentCenterIndex - newIndexRange / 2); state.view.endIndex = Math.min(state.waveforms.channel1.length, currentCenterIndex + newIndexRange / 2); draw(); updateControlsFromView(state); });
-        document.getElementById('voltageScale').addEventListener('change', e => { const state = getActiveState(); if (!state) return; const newVoltageScalePerDiv = parseEng(e.target.value); if (isNaN(newVoltageScalePerDiv) || newVoltageScalePerDiv <= 0) { updateControlsFromView(state); return; } const newVoltageSpan = newVoltageScalePerDiv * Y_DIVS; const newRawRange = newVoltageSpan / VOLTS_PER_BYTE; const currentVCenter = (state.view.vMin + state.view.vMax) / 2; state.view.vMin = currentVCenter - newRawRange / 2; state.view.vMax = currentVCenter + newRawRange / 2; draw(); updateControlsFromView(state); });
-        document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT=s.view.endIndex-s.view.startIndex, spanV=s.view.vMax-s.view.vMin; s.cursors.x1=s.view.startIndex+spanT*0.25; s.cursors.x2=s.view.startIndex+spanT*0.75; s.cursors.y1=s.view.vMin+spanV*0.25; s.cursors.y2=s.view.vMin+spanV*0.75; trackCursors();} draw(); });
+        document.getElementById('separateViewCheckbox').addEventListener('change', e => { displayOptions.separateView = e.target.checked; resizeCanvas(); });
+        document.getElementById('timeScale').addEventListener('change', e => { const state = getActiveState(); if (!state) return; const newTimeScalePerDiv = parseEng(e.target.value); if (isNaN(newTimeScalePerDiv) || newTimeScalePerDiv <= 0) { updateControlsFromView(state); return; } const newTimeSpan = newTimeScalePerDiv * X_DIVS; const newIndexRange = newTimeSpan / state.metadata.timePerPoint; const currentCenterIndex = (state.view.startIndex + state.view.endIndex) / 2; state.view.startIndex = Math.max(0, currentCenterIndex - newIndexRange / 2); state.view.endIndex = Math.min(state.metadata.numPoints, currentCenterIndex + newIndexRange / 2); draw(); updateControlsFromView(state); });
+        document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT = (s.view.endIndex - s.view.startIndex) * s.metadata.timePerPoint; const startTime = s.view.startIndex * s.metadata.timePerPoint; const firstCh = getVisibleChannels(s)[0]; if(firstCh){const chInfo=s.channelInfo[firstCh]; const spanV=chInfo.vMax-chInfo.vMin; s.cursors.y1=chInfo.vMin+spanV*0.25; s.cursors.y2=chInfo.vMin+spanV*0.75;} s.cursors.x1=startTime+spanT*0.25; s.cursors.x2=startTime+spanT*0.75; trackCursors();} draw(); });
         document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
         document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; activeInteraction = {type: null}; draw(); });
         
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT') return;
             const state = getActiveState();
-            if (e.key.toLowerCase() === 'f') { if (state) { if(isYFitted) { fullResetView(); } else { fitYToView(); } } }
+            if (e.key.toLowerCase() === 'f') {
+                if (state) {
+                    const hoveredChannel = getChannelFromMousePosition(lastMousePos, state);
+                    if (hoveredChannel) {
+                        fitYToChannel(hoveredChannel);
+                    } else if (!displayOptions.separateView) {
+                        fitYToAllVisible();
+                    }
+                }
+            }
             if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); exportToClipboard(); }
             if (e.key === 'Delete' && activeInteraction.type && activeInteraction.index > -1) { if(!state) return; if (activeInteraction.type === 'annotation') { state.annotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'textAnnotation') { state.textAnnotations.splice(activeInteraction.index, 1); } activeInteraction = {type: null}; draw(); }
             if (e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); }
@@ -910,80 +1487,139 @@
             if (e.key === 'Escape') {
                 if (textAnnotationMode) toggleTextAnnotationMode();
                 if (zoomModeEnabled) {
-                    zoomModeEnabled = false;
-                    canvas.style.cursor = 'grab';
-                    if (state) statusText.textContent = `Loaded: ${state.fileName}`;
-                    else statusText.textContent = 'Ready to load WFM file';
+                    zoomModeEnabled = false; canvas.style.cursor = 'grab';
+                    if (state) statusText.textContent = `Loaded: ${state.fileName}`; else statusText.textContent = 'Ready to load WFM file';
                 }
             }
         });
         
-        // --- CURSOR FEATURE LISTENERS & LOGIC ---
-        document.querySelectorAll('input[name="cursorTrack"]').forEach(radio => { radio.addEventListener('change', e => { const s = getActiveState(); if (s) { s.cursors.trackingChannel = e.target.value === 'null' ? null : e.target.value; trackCursors(); draw(); }}); });
         document.getElementById('setToViewMaxBtn').addEventListener('click', () => setCursorsToExtrema('max'));
         document.getElementById('setToViewMinBtn').addEventListener('click', () => setCursorsToExtrema('min'));
-        
-        function trackCursors() { const s = getActiveState(); if (!s || !s.cursors.trackingChannel || !s.waveforms[s.cursors.trackingChannel]) return; const data = s.waveforms[s.cursors.trackingChannel]; const i1 = Math.round(s.cursors.x1); if(data[i1] !== undefined) s.cursors.y1 = data[i1] - 127; const i2 = Math.round(s.cursors.x2); if(data[i2] !== undefined) s.cursors.y2 = data[i2] - 127; }
-        function findViewExtrema(channels) { const s = getActiveState(); if (!s) return null; let viewMin = { val: Infinity, index: -1, ch: null }, viewMax = { val: -Infinity, index: -1, ch: null }; const start = Math.floor(s.view.startIndex), end = Math.ceil(s.view.endIndex); channels.forEach(ch => { const data = s.waveforms[ch]; for (let i = start; i < end; i++) { const val = data[i]; if (val < viewMin.val) { viewMin = { val, index: i, ch }; } if (val > viewMax.val) { viewMax = { val, index: i, ch }; } } }); return { min: viewMin, max: viewMax }; }
-        function setCursorsToExtrema(type) { const s = getActiveState(); if (!s) return; const visibleChannels = s.drawOrder.filter(ch => s.channelInfo[ch].visible); if (visibleChannels.length === 0) return; const extrema = findViewExtrema(visibleChannels); if(type === 'max' && extrema.max.index !== -1) { s.cursors.x1 = extrema.max.index; s.cursors.y1 = extrema.max.val - 127; } else if (type === 'min' && extrema.min.index !== -1) { s.cursors.x2 = extrema.min.index; s.cursors.y2 = extrema.min.val - 127; } updateCursorReadouts(s.cursors); draw(); }
-        
-        // --- TEXT ANNOTATION LOGIC ---
+        function trackCursors() { const s = getActiveState(); if (!s || !s.cursors.trackingChannel || !s.waveforms[s.cursors.trackingChannel]) return; const data = s.waveforms[s.cursors.trackingChannel]; const i1 = Math.round(s.cursors.x1 / s.metadata.timePerPoint); if(data[i1] !== undefined) s.cursors.y1 = data[i1]; const i2 = Math.round(s.cursors.x2 / s.metadata.timePerPoint); if(data[i2] !== undefined) s.cursors.y2 = data[i2]; }
+        function findViewExtrema(channels) { const s = getActiveState(); if (!s) return null; let viewMin = { val: Infinity, time: -1, ch: null }, viewMax = { val: -Infinity, time: -1, ch: null }; const start = Math.floor(s.view.startIndex), end = Math.ceil(s.view.endIndex); channels.forEach(ch => { const data = s.waveforms[ch]; for (let i = start; i < end; i++) { const val = data[i]; if (val < viewMin.val) { viewMin = { val, time: i * s.metadata.timePerPoint, ch }; } if (val > viewMax.val) { viewMax = { val, time: i * s.metadata.timePerPoint, ch }; } } }); return { min: viewMin, max: viewMax }; }
+        function setCursorsToExtrema(type) { const s = getActiveState(); if (!s) return; const visibleChannels = getVisibleChannels(s); if (visibleChannels.length === 0) return; const extrema = findViewExtrema(visibleChannels); if(type === 'max' && extrema.max.time !== -1) { s.cursors.x1 = extrema.max.time; s.cursors.y1 = extrema.max.val; } else if (type === 'min' && extrema.min.time !== -1) { s.cursors.x2 = extrema.min.time; s.cursors.y2 = extrema.min.val; } updateCursorReadouts(s); draw(); }
         function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode && s.annotationMode) s.annotationMode = false; canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
-        function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const dataPos = screenToData({x: e.offsetX, y: e.offsetY}, s.view); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ x: dataPos.x, y: dataPos.y, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
+        function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
         
-        // --- MODAL & EXPORT LOGIC (Unchanged) ---
-        function setupModals() {
-            const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
-            document.getElementById('aboutBtn').addEventListener('click', () => { 
-                const date = new Date();
-                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Singapore' };
-                document.getElementById('aboutDate').textContent = `Date: ${date.toLocaleDateString('en-SG', options)}`; 
-                aboutModal.style.display='flex'; 
+         function setupModals() {
+               const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
+               document.getElementById('aboutBtn').addEventListener('click', () => { 
+                  const date = new Date();
+                  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                  document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)} (Singapore)`; 
+                  aboutModal.style.display='flex'; 
+               });
+               document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
+               [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
+               document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
+                  const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isBW: document.getElementById('bwExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
+                  executeExport(options); exportModal.style.display = 'none'; 
+               });
+         }
+         async function exportToClipboard() {
+               const state = getActiveState(); if (!state) return;
+               const isBW = document.getElementById('bwCopyCheckbox').checked;
+               try {
+                  const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
+                  await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+                  statusText.textContent = 'Copied to clipboard!';
+                  setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
+               } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
+         }
+         async function executeExport(options) {
+               const state = getActiveState(); if (!state) return;
+               const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+               const newFilename = `${originalFilename}_export.${options.format}`;
+               if (options.format === 'csv') {
+                 alert('CSV export is not fully implemented in this version.'); 
+               } else if (options.format === 'svg') {
+                    try {
+                        const svgString = generateSVG(options);
+                        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                    } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
+               } else {
+                  try {
+                     const blob = await generateImageBlob(options);
+                     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
+                     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                  } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
+               }
+         }
+         function generateImageBlob(options) {
+            return new Promise((resolve, reject) => {
+               const state = getActiveState(); if (!state) return reject('No active state');
+               const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
+               tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
+               tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
+               tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
             });
-            document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
-            [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
-            document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
-                const options = { 
-                    content: document.querySelector('input[name="content"]:checked').value, 
-                    format: document.querySelector('input[name="format"]:checked').value, 
-                    isIEEE: document.getElementById('ieeeStyleCheckbox').checked,
-                    isBW: document.getElementById('bwExportCheckbox').checked,
-                    tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked,
-                    ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), 
-                    ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), 
-                    exportStats: document.getElementById('exportStatsCheckbox').checked, 
-                    exportCursors: document.getElementById('exportCursorsCheckbox').checked, 
-                    exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked,
-                }; 
-                executeExport(options); 
-                exportModal.style.display = 'none'; 
-            });
-        }
-        async function exportToClipboard() {
-            const state = getActiveState(); if (!state) return;
-            const isBW = document.getElementById('bwCopyCheckbox').checked;
-            try {
-                const blob = await generatePngBlob({ 
-                    content: 'current', 
-                    isIEEE: false,
-                    isBW: isBW,
-                    exportStats: true, 
-                    exportCursors: state.cursors.enabled, 
-                    exportAnnotations: true
-                });
-                await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-                statusText.textContent = 'Copied to clipboard!';
-                setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
-            } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
-        }
-        function generatePngBlob(o) { return new Promise((resolve) => { const state = getActiveState(); if(!state) return resolve(null); const container = document.getElementById('waveformContainer'); const targetView = {...state.view}; let x, h; if (o.isIEEE) { const DPI = 300; x = (o.ieeeWidth || 3.45) * DPI; h = (o.ieeeHeight || 2.5) * DPI; } else { x = container.clientWidth; h = container.clientHeight; } const p = {top:h*0.1,right:x*0.05,bottom:h*0.18,left:x*0.13}; const plotArea = {x:p.left,y:p.top,width:x-p.left-p.right,height:h-p.top-p.bottom}; const dataToScreenPNG = (dataPos) => ({ x: plotArea.x + ((dataPos.x - targetView.startIndex) / (targetView.endIndex - targetView.startIndex || 1)) * plotArea.width, y: plotArea.y + ((targetView.vMax - dataPos.y) / (targetView.vMax - targetView.vMin || 1)) * plotArea.height }); const colors = { bg: o.isIEEE || o.isBW ? '#fff' : '#1e1e1e', grid: o.isIEEE || o.isBW ? '#e0e0e0' : '#333', text: o.isIEEE || o.isBW ? '#000' : '#a0a0a0', border: o.isIEEE || o.isBW ? '#000' : '#888', trace1: o.isIEEE || o.isBW ? '#000' : state.channelInfo.channel1.color, trace2: o.isIEEE || o.isBW ? '#888' : state.channelInfo.channel2.color, }; let tableSize = { width: 0, height: 0 }; if (o.exportStats && o.tableAtBottom) { const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); tableSize = drawStatsTable(tempCtx, state, { isExport: true }); h += tableSize.height + 40; } const c = document.createElement('canvas'); c.width=x; c.height=h; const C=c.getContext('2d'); C.fillStyle=colors.bg; C.fillRect(0,0,x,h); C.strokeStyle=colors.grid; C.lineWidth=1; for(let i=0;i<=X_DIVS;i++){C.beginPath(); C.moveTo(plotArea.x+i/X_DIVS*plotArea.width,plotArea.y); C.lineTo(plotArea.x+i/X_DIVS*plotArea.width,plotArea.y+plotArea.height); C.stroke();} for(let i=0;i<=Y_DIVS;i++){C.beginPath(); C.moveTo(plotArea.x,plotArea.y+i/Y_DIVS*plotArea.height); C.lineTo(plotArea.x+plotArea.width,plotArea.y+i/Y_DIVS*plotArea.height); C.stroke();} C.save(); C.rect(plotArea.x,plotArea.y,plotArea.width,plotArea.height); C.clip(); const visCh=state.drawOrder.filter(ch=>state.channelInfo[ch].visible&&state.waveforms[ch]); visCh.forEach((ch, i)=>{ let color = i === 0 ? colors.trace1 : colors.trace2; C.strokeStyle=color; C.lineWidth=2; C.beginPath(); const pts=targetView.endIndex-targetView.startIndex, vR=targetView.vMax-targetView.vMin; if(vR > 0 && pts > plotArea.width) { decimate(state.waveforms[ch],targetView.startIndex,targetView.endIndex,plotArea.width).forEach((d,j)=>{ const X=plotArea.x+j, y_min=plotArea.y+plotArea.height-((d.min-targetView.vMin)/vR)*plotArea.height, y_max=plotArea.y+plotArea.height-((d.max-targetView.vMin)/vR)*plotArea.height; if(j===0)C.moveTo(X,y_min); C.lineTo(X,y_min); C.lineTo(X,y_max); }); } else if (vR > 0 && pts > 1) { for(let j=0;j<pts;j++){ const val=state.waveforms[ch][Math.floor(targetView.startIndex)+j]-127; const X=plotArea.x+j/(pts-1)*plotArea.width, Y=plotArea.y+plotArea.height-((val-targetView.vMin)/vR)*plotArea.height; if(j===0)C.moveTo(X,Y);else C.lineTo(X,Y);} } C.stroke(); }); if (o.exportCursors && state.cursors.enabled) { drawCursors(C, plotArea, state.cursors, targetView); } if (o.exportAnnotations) { drawAnnotations(C, targetView, plotArea, dataToScreenPNG, state.annotations); drawTextAnnotations(C, targetView, plotArea, dataToScreenPNG, state.textAnnotations); } C.restore(); if (o.exportStats) { const tableColors = { bg: (o.isIEEE || o.isBW) ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.6)', grid: (o.isIEEE || o.isBW) ? '#ccc' : '#555', text: (o.isIEEE || o.isBW) ? '#000' : '#fff', trace1: colors.trace1, trace2: colors.trace2 }; if (o.tableAtBottom) { drawStatsTable(C, state, { x: plotArea.x, y: plotArea.y + plotArea.height + 60, isExport: true, colors: tableColors}); } else { drawStatsTable(C, state, { x: plotArea.x + 10, y: plotArea.y + 10, isExport: true, colors: tableColors }); } } C.strokeStyle = colors.border; C.lineWidth = 1.5; C.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height); C.fillStyle=colors.text; C.font=o.isIEEE?'10pt Times New Roman':'14px Segoe UI'; C.textAlign='right'; C.textBaseline = 'middle'; const vR=targetView.vMax-targetView.vMin; if(vR>0){for(let i=0;i<=Y_DIVS;i++){C.fillText(formatEng((targetView.vMax-i/Y_DIVS*vR)*VOLTS_PER_BYTE,'V',3,false),plotArea.x-8,plotArea.y+i/Y_DIVS*plotArea.height)}} C.textAlign='center'; C.textBaseline = 'top'; const tS=targetView.endIndex-targetView.startIndex; if(tS>0){const tStart=targetView.startIndex*TIME_PER_POINT, tSpan=tS*TIME_PER_POINT; for(let i=0;i<=X_DIVS;i++){ const timeVal = displayOptions.relativeTime ? (i/X_DIVS*tSpan) : (tStart+i/X_DIVS*tSpan); C.fillText(formatEng(timeVal,'s',3,false),plotArea.x+i/X_DIVS*plotArea.width,plotArea.y+plotArea.height+15)}} if(o.isIEEE){ C.font = '10pt Times New Roman'; C.fillText("Time (s)",plotArea.x+plotArea.width/2,plotArea.y+plotArea.height+45); C.save(); C.translate(plotArea.x-85,plotArea.y+plotArea.height/2); C.rotate(-Math.PI/2); C.textAlign='center'; C.fillText("Voltage (V)",0,0); C.restore(); } c.toBlob(blob => resolve(blob), 'image/png'); }); }
-        function executeExport(o) { const state = getActiveState(); if(!state) return; const format = o.format || 'png'; if (format === 'csv') { exportAsCSV(o, state); return; } if (format === 'png') { generatePngBlob(o).then(blob => { const a=document.createElement('a'); a.download=`${state.fileName.replace('.wfm','')}.png`; a.href=URL.createObjectURL(blob); a.click(); URL.revokeObjectURL(a.href); }); return; } const container = document.getElementById('waveformContainer'); let W, H; if (o.isIEEE) { W = o.ieeeWidth * 96; H = o.ieeeHeight * 96; } else { W = container.clientWidth; H = container.clientHeight; } const p = o.isIEEE ? { x: W * 0.18, y: H * 0.1, width: W * (1 - 0.18 - 0.05), height: H * (1 - 0.1 - 0.25) } : { x: W * 0.15, y: H * 0.1, width: W * (1 - 0.15 - 0.05), height: H * (1 - 0.1 - 0.20) }; const colors = { bg: o.isIEEE || o.isBW ? '#fff' : '#1e1e1e', grid: o.isIEEE || o.isBW ? '#e0e0e0' : '#333', text: o.isIEEE || o.isBW ? '#000' : '#a0a0a0', border: o.isIEEE || o.isBW ? '#000' : '#888', trace1: o.isIEEE || o.isBW ? '#000' : state.channelInfo.channel1.color, trace2: o.isIEEE || o.isBW ? '#888' : state.channelInfo.channel2.color, }; const targetView = o.content === 'all' ? {startIndex: 0, endIndex: state.waveforms.channel1.length, vMin: state.view.vMin, vMax: state.view.vMax} : {...state.view}; if (o.content === 'all') { let min=128,max=-128; for(let v of state.waveforms.channel1){if(v<min)min=v;if(v>max)max=v}; targetView.vMin=min-127-10; targetView.vMax=max-127+10;} const font = o.isIEEE ? 'Times New Roman' : 'Segoe UI'; let tableHeight = 0; if(o.exportStats && o.tableAtBottom) { const lineHeight = 20; const rows = ['max', 'min', 'avg', 'rms']; tableHeight = (rows.length + 1) * lineHeight + 40; H += tableHeight; } let svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" font-family="${font}" font-size="10pt"><defs><clipPath id="clip"><rect x="0" y="0" width="${p.width}" height="${p.height}" /></clipPath></defs><rect width="100%" height="100%" fill="${colors.bg}"/>`; svg += `<g transform="translate(${p.x}, ${p.y})" stroke="${colors.grid}" stroke-width="1">`; for(let j=1; j<4; j++){ let i = j * (X_DIVS / 4); svg += `<line x1="${i/X_DIVS*p.width}" y1="0" x2="${i/X_DIVS*p.width}" y2="${p.height}" />`; } for(let j=1; j<4; j++){ let i = j * (Y_DIVS / 4); svg += `<line x1="0" y1="${i/Y_DIVS*p.height}" x2="${p.width}" y2="${i/Y_DIVS*p.height}" />`; } svg += `</g><g transform="translate(${p.x}, ${p.y})" clip-path="url(#clip)">`; const visCh = state.drawOrder.filter(c => state.channelInfo[c].visible && state.waveforms[c]); visCh.forEach((ch, i) => { let color = i === 0 ? colors.trace1 : colors.trace2; let pathData = '', pts = targetView.endIndex - targetView.startIndex, vR = targetView.vMax - targetView.vMin; if (pts > 1 && vR > 0) { for(let j=0; j<pts; j++){ const val=state.waveforms[ch][Math.floor(targetView.startIndex)+j]-127; const x=(j/(pts-1))*p.width, y=p.height-((val-targetView.vMin)/vR)*p.height; pathData+=(j===0?'M':'L')+`${x.toFixed(2)},${y.toFixed(2)} `}} svg += `<path d="${pathData}" stroke="${color}" fill="none" stroke-width="1.5" />`; }); if (o.isIEEE) { let legendYOffset = 15; visCh.forEach((ch, i) => { let color = i === 0 ? colors.trace1 : colors.trace2; const yPos = legendYOffset + (i * 20); svg += `<g transform="translate(10, 10)"><line x1="0" y1="${yPos}" x2="25" y2="${yPos}" stroke="${color}" stroke-width="2" />`; svg += `<text x="35" y="${yPos}" dominant-baseline="middle" fill="${colors.text}">${state.channelInfo[ch].name}</text></g>`; }); } if (o.exportCursors && state.cursors.enabled) { svg += drawCursorsSVG(state, targetView, p); } if (o.exportAnnotations) { svg += drawAnnotationsSVG(state, targetView, p); svg += drawTextAnnotationsSVG(state, targetView, p); } svg += `</g><rect x="${p.x}" y="${p.y}" width="${p.width}" height="${p.height}" fill="none" stroke="${colors.border}" stroke-width="1.5" /><g fill="${colors.text}">`; const vR=targetView.vMax-targetView.vMin; if(vR > 0){ for(let j=0; j<=4; j++){ let i = j * (Y_DIVS/4); svg+=`<text x="${p.x-8}" y="${p.y+(1-i/Y_DIVS)*p.height}" text-anchor="end" dominant-baseline="middle">${formatEng((targetView.vMin+i/Y_DIVS*vR)*VOLTS_PER_BYTE,'V',3,false)}</text>`}} const tS=targetView.endIndex-targetView.startIndex; if(tS > 0){ const tStart=targetView.startIndex*TIME_PER_POINT, tSpan=tS*TIME_PER_POINT; for(let j=0; j<=4; j++){ let i = j * (X_DIVS/4); const timeVal = displayOptions.relativeTime ? (i/X_DIVS*tSpan) : (tStart+i/X_DIVS*tSpan); svg+=`<text x="${p.x+i/X_DIVS*p.width}" y="${p.y+p.height+20}" text-anchor="middle">${formatEng(timeVal,'s',3,false)}</text>`}} const titleFontSize = o.isIEEE ? '10pt' : '16px'; svg += `<text x="${p.x+p.width/2}" y="${p.y+p.height + 45}" text-anchor="middle" font-size="${titleFontSize}">${"Time (s)"}</text></g>`; svg += `<g transform="translate(${o.isIEEE ? W*0.04 : W*0.06}, ${p.y + p.height/2}) rotate(-90)" fill="${colors.text}"><text x="0" y="0" text-anchor="middle" font-size="${titleFontSize}">${"Voltage (V)"}</text></g>`; if(o.exportStats && o.tableAtBottom) { const allStats = {}; visCh.forEach(ch => { allStats[ch] = calculateStats(state.waveforms[ch], targetView); }); const rows = {Max: 'max', Min: 'min', Avg: 'avg', RMS: 'rms'}; let tableX = p.x, tableY = p.y + p.height + 70; let table = `<g transform="translate(${tableX}, ${tableY})" font-size="10pt" font-family="Consolas, monospace">`; const colWidths = [60, 100, 100], lineHeight = 20, tableH = (Object.keys(rows).length) * lineHeight + 5; const tableW = colWidths[0] + visCh.length * colWidths[1]; table += `<rect x="0" y="0" width="${tableW}" height="${tableH}" fill="none" stroke="${colors.grid}" />`; let y = lineHeight / 2 + 2; for (const [label, key] of Object.entries(rows)) { table += `<text x="5" y="${y}" fill="${colors.text}">${label}</text>`; visCh.forEach((ch, i) => { table += `<text x="${colWidths[0] + i*colWidths[1] + colWidths[1] - 5}" y="${y}" text-anchor="end" fill="${i === 0 ? colors.trace1 : colors.trace2}">${formatEng(allStats[ch][key], 'V')}</text>`; }); y += lineHeight; } table += `<line x1="${colWidths[0]}" y1="0" x2="${colWidths[0]}" y2="${tableH}" stroke="${colors.grid}"/>`; table += `</g>`; svg += table; } svg += `</svg>`; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'})); a.download=`${state.fileName.replace('.wfm','')}.svg`; a.click(); }
-        function drawCursorsSVG(state, targetView, p) { let svg = ''; const dataToScreenSVG = (dataPos) => ({ x: (dataPos.x - targetView.startIndex) / (targetView.endIndex - targetView.startIndex || 1) * p.width, y: (targetView.vMax - dataPos.y) / (targetView.vMax - targetView.vMin || 1) * p.height }); const {x1, x2, y1, y2} = state.cursors; const x1_s = dataToScreenSVG({x: x1, y: 0}).x; const x2_s = dataToScreenSVG({x: x2, y: 0}).x; const y1_s = dataToScreenSVG({x: 0, y: y1}).y; const y2_s = dataToScreenSVG({x: 0, y: y2}).y; svg += `<line x1="${x1_s}" y1="0" x2="${x1_s}" y2="${p.height}" stroke="#f0ad4e" stroke-width="1.5" stroke-dasharray="6 4" />`; svg += `<line x1="${x2_s}" y1="0" x2="${x2_s}" y2="${p.height}" stroke="#f0ad4e" stroke-width="1.5" stroke-dasharray="6 4" />`; svg += `<line x1="0" y1="${y1_s}" x2="${p.width}" y2="${y1_s}" stroke="#32f0ad" stroke-width="1.5" stroke-dasharray="6 4" />`; svg += `<line x1="0" y1="${y2_s}" x2="${p.width}" y2="${y2_s}" stroke="#32f0ad" stroke-width="1.5" stroke-dasharray="6 4" />`; return svg; }
-        function drawAnnotationsSVG(state, targetView, p) { let svg = ''; const dataToScreenSVG = (dataPos) => ({ x: (dataPos.x - targetView.startIndex) / (targetView.endIndex - targetView.startIndex || 1) * p.width, y: (targetView.vMax - dataPos.y) / (targetView.vMax - targetView.vMin || 1) * p.height }); state.annotations.forEach(box => { const p1 = dataToScreenSVG({x: box.t1, y: box.v1}); const p2 = dataToScreenSVG({x: box.t2, y: box.v2}); const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); svg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" stroke="#ffc107" stroke-width="1" fill="rgba(255, 193, 7, 0.15)" />`; const dt = (box.t2 - box.t1) * TIME_PER_POINT, dV = (box.v2 - box.v1) * VOLTS_PER_BYTE; svg += `<text x="${x+5}" y="${y+15}" font-size="10pt" fill="#ffc107">Δt: ${formatEng(dt, 's')}</text>`; svg += `<text x="${x+5}" y="${y+30}" font-size="10pt" fill="#ffc107">ΔV: ${formatEng(dV, 'V')}</text>`; }); return svg; }
-        function drawTextAnnotationsSVG(state, targetView, p) { let svg = ''; const dataToScreenSVG = (dataPos) => ({ x: (dataPos.x - targetView.startIndex) / (targetView.endIndex - targetView.startIndex || 1) * p.width, y: (targetView.vMax - dataPos.y) / (targetView.vMax - targetView.vMin || 1) * p.height }); state.textAnnotations.forEach(ann => { const pos = dataToScreenSVG({x: ann.x, y: ann.y}); svg += `<text x="${pos.x + 5}" y="${pos.y - 7}" fill="#f0ad4e" font-size="14px" dominant-baseline="middle">${ann.text}</text>`; }); return svg; }
-        function exportAsCSV(o, state){let c='Time (s),Channel 1 (V),Channel 2 (V)\n';const s=o.content==='all'?0:Math.floor(state.view.startIndex),e=o.content==='all'?state.waveforms.channel1.length:Math.floor(state.view.endIndex); const timeOffset = displayOptions.relativeTime ? (s * TIME_PER_POINT) : 0; for(let i=s;i<e;i++){c+=`${((i*TIME_PER_POINT)-timeOffset).toExponential(6)},${((state.waveforms.channel1[i]-127)*VOLTS_PER_BYTE).toExponential(6)},${((state.waveforms.channel2[i]-127)*VOLTS_PER_BYTE).toExponential(6)}\n`}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([c],{type:'text/csv;charset=utf-8;'}));a.setAttribute("download",`${state.fileName.replace('.wfm','')}.csv`);a.click()}
+         }
+        
+         function generateSVG(options) {
+            const state = getActiveState();
+            if (!state) return '';
+            const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
+            const PADDING = getDynamicPadding(state);
+            const plotArea = getPlotArea(width, height, state);
 
-        // --- INITIALIZATION ---
+            let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
+            svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
+            svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
+            svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
+            
+            const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
+            const tStart = state.view.startIndex * state.metadata.timePerPoint;
+
+            for (let i = 0; i <= X_DIVS; i++) {
+                const x = plotArea.x + i / X_DIVS * plotArea.width;
+                svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
+                const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
+                svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
+            }
+            svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
+            
+            for (let i = 0; i <= Y_DIVS; i++) {
+                const y = plotArea.y + i / Y_DIVS * plotArea.height;
+                svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
+            }
+
+            const visibleChannels = getVisibleChannels(state);
+            visibleChannels.forEach((chId, i) => {
+                const chInfo = state.channelInfo[chId];
+                const vRange = chInfo.vMax - chInfo.vMin;
+                const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
+                for (let j = 0; j <= Y_DIVS; j++) {
+                    const y = plotArea.y + j/Y_DIVS*plotArea.height;
+                    const v = chInfo.vMax - j/Y_DIVS*vRange;
+                    svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
+                }
+            });
+
+            const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
+            const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
+            svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
+            
+            svg += `<g clip-path="url(#clip)">`;
+            visibleChannels.forEach(ch => {
+                const pathData = [];
+                const voltageData = state.waveforms[ch];
+                const startIndex = Math.max(0, Math.floor(state.view.startIndex));
+                const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
+                for(let i = startIndex; i < endIndex; i++) {
+                    const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
+                    pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
+                }
+                svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
+            });
+            svg += `</g>`;
+
+            svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
+            svg += `</svg>`;
+            return svg;
+         }
+
         setupModals();
         new ResizeObserver(resizeCanvas).observe(document.getElementById('waveformContainer'));
         draw(); 
