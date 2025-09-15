@@ -76,9 +76,10 @@
         #fileDetailsContent, .load-options-info { font-family: Consolas, monospace; font-size: 12px; line-height: 1.6; }
         #fileDetailsContent div, .load-options-info div { display: flex; justify-content: space-between; margin-bottom: 4px; }
         #fileDetailsContent span:first-child, .load-options-info span:first-child { color: #a0a0a0; padding-right: 15px;}
-        .load-options-channels { margin-top: 20px; }
+        .load-options-channels { margin-top: 15px; }
         .load-options-channel-item { background: #4a4a4a; padding: 12px; border-radius: 5px; margin-bottom: 10px; }
         .load-options-channel-item h4 { margin-bottom: 10px; border-bottom: 1px solid #666; padding-bottom: 5px; }
+        #loadOptionsModal .control-item { margin-bottom: 8px; }
 
 
         @media (max-width: 768px) {
@@ -150,7 +151,7 @@
                       <div class="control-label" style="margin-bottom: 8px;">Cursor Tracking</div>
                       <div id="cursorTrackContainer" style="display: flex; justify-content: space-around; font-size: 13px; flex-wrap: wrap; gap: 5px;">
                               <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
-                            </div>
+                          </div>
                       <div style="display: flex; gap: 8px; margin-top: 12px;">
                               <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
                               <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
@@ -492,7 +493,7 @@
 
         function resizeCanvas() { const dpr = window.devicePixelRatio || 1; const rect = document.getElementById('waveformContainer').getBoundingClientRect(); canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr); draw(); }
 
-        function draw() {
+function draw() {
             requestAnimationFrame(() => {
                 const state = getActiveState();
                 const { width, height } = canvas.getBoundingClientRect();
@@ -565,16 +566,43 @@
                     if (activeInteraction.type === 'measure-drag') {
                         const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
                         if (w > 5 && h > 5) {
-                            const refCh = getVisibleChannels(state)[0];
-                            if (refCh) {
-                                const p_area = displayOptions.separateView ? null : getPlotArea(width, height, state);
-                                const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, refCh, p_area);
-                                const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, refCh, p_area);
-                                const dt = Math.abs(t_end - t_start), dV = Math.abs(v_end - v_start);
+                            let p_area = null;
+                            let dragRefCh = getVisibleChannels(state)[0];
+
+                            if (displayOptions.separateView && visibleChannels.length > 0) {
+                                const PADDING = getDynamicPadding(state);
+                                const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                                const totalGapHeight = (visibleChannels.length - 1) * SEPARATE_VIEW_GAP;
+                                const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
+                                if (individualPlotHeight > 0) {
+                                    const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
+                                    const relativeY = dragStart.y - PADDING.top;
+                                    const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
+                                    
+                                    if (blockIndex < visibleChannels.length) {
+                                        dragRefCh = visibleChannels[blockIndex];
+                                        p_area = {
+                                            x: PADDING.left,
+                                            y: PADDING.top + blockIndex * blockHeight,
+                                            width: width - PADDING.left - PADDING.right,
+                                            height: individualPlotHeight
+                                        };
+                                    }
+                                }
+                            } else {
+                                p_area = getPlotArea(width, height, state);
+                            }
+
+                            if (dragRefCh && p_area) {
+                                const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, dragRefCh, p_area);
+                                const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, dragRefCh, p_area);
+                                const dt = Math.abs(t_end - t_start);
+                                const dV = Math.abs(v_end - v_start);
+                                const freq = dt > 0 ? 1 / dt : 0;
                                 ctx.fillStyle = '#ffc107'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'left';
                                 const x = Math.min(dragStart.x, dragEnd.x) + 5, y = Math.min(dragStart.y, dragEnd.y) - 8;
                                 ctx.textBaseline = 'bottom';
-                                ctx.fillText(`Δt: ${formatEng(dt, 's')}, ΔV: ${formatEng(dV, state.channelInfo[refCh].units)}`, x, y);
+                                ctx.fillText(`Δt: ${formatEng(dt, 's')} (${formatEng(freq, 'Hz')}), ΔV: ${formatEng(dV, state.channelInfo[dragRefCh].units)}`, x, y);
                             }
                         }
                     }
@@ -582,7 +610,16 @@
             });
         }
         
-        function formatEng(v, u, p = 3, includeUnit = true){ if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); const s = v < 0 ? '-' : ''; v = Math.abs(v); if (v === 0) return `0 ${includeUnit && u ? u : ''}`.trim(); const k = ['f', 'p', 'n', 'µ', 'm', '', 'k', 'M', 'G', 'T']; const i = Math.floor((Math.log10(v) || 0) / 3); const d = v / 10**(i * 3); return (s + d.toPrecision(p) + (k[i + 4] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); }
+                function formatEng(v, u, p = 3, includeUnit = true){ 
+            if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); 
+            const s = v < 0 ? '-' : ''; 
+            v = Math.abs(v); 
+            if (v === 0) return `0 ${includeUnit && u ? u : ''}`.trim(); 
+            const k = ['f', 'p', 'n', 'µ', 'm', '', 'k', 'M', 'G', 'T']; 
+            const i = Math.floor((Math.log10(v) || 0) / 3); 
+            const d = v / 10**(i * 3); 
+            return (s + d.toPrecision(p) + (k[i + 5] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); 
+        }
         function drawGrid(p, isSeparate=false, isLast=true){ctx.strokeStyle='#333';ctx.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;ctx.beginPath();ctx.moveTo(x,p.y);ctx.lineTo(x,p.y+p.height);ctx.stroke()} const yDivs = (isSeparate || displayOptions.separateView) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;ctx.beginPath();ctx.moveTo(p.x,y);ctx.lineTo(p.x+p.width,y);ctx.stroke()}}
         
         function drawAxisLabels(p, view, state, separateChannelId = null){
@@ -698,6 +735,16 @@
         function drawAnnotations(context, targetView, plotArea, state, annotations) { const handleSize = 8; const refCh = getVisibleChannels(state)[0]; if(!refCh) return; annotations.forEach((box, index) => { const p1 = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, refCh, plotArea); const p2 = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, refCh, plotArea); const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index; context.strokeStyle = isSelected ? '#ffffff' : '#ffc107'; context.fillStyle = 'rgba(255, 193, 7, 0.15)'; context.lineWidth = isSelected ? 2 : 1; context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h); const dt = box.t2 - box.t1, dV = box.v2 - box.v1; context.fillStyle = isSelected ? '#ffffff' : '#ffc107'; context.font = '10pt "Times New Roman"'; context.textAlign = 'left'; const placeTextOutside = (y + h > plotArea.y + plotArea.height - 30) || h < 35; let textY, textBaseline; if (placeTextOutside) { textY = y - 5; textBaseline = 'bottom'; } else { textY = y + 5; textBaseline = 'top'; } context.textBaseline = textBaseline; context.fillText(`Δt: ${formatEng(dt, 's')}`, x + 5, textY); context.fillText(`ΔV: ${formatEng(dV, 'V')}`, x + 5, textY + (placeTextOutside ? -15 : 15)); if(isSelected && context === ctx){ context.fillStyle = '#ffffff'; context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize); } }); }
         function drawTextAnnotations(context, targetView, plotArea, state, textAnnotations) { const refCh = getVisibleChannels(state)[0]; if(!refCh) return; textAnnotations.forEach((ann, index) => { const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, refCh, plotArea); const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index; context.font = '14px Segoe UI'; const textWidth = context.measureText(ann.text).width; context.fillStyle = 'rgba(0, 0, 0, 0.6)'; context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22); if (isSelected && context === ctx) { context.strokeStyle = '#00bcf2'; context.lineWidth = 2; context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22); } context.fillStyle = '#f0ad4e'; context.textAlign = 'left'; context.textBaseline = 'middle'; context.fillText(ann.text, pos.x + 5, pos.y - 7); }); }
 
+        function snapToCommonScale(value) {
+            if (value <= 0) return value;
+            const power = Math.pow(10, Math.floor(Math.log10(value)));
+            const normalized = value / power; // Value will be between 1.0 and 9.99...
+            if (normalized < 1.5) return 1 * power;
+            if (normalized < 3.5) return 2 * power;
+            if (normalized < 7.5) return 5 * power;
+            return 10 * power;
+        }
+
         function fullResetView(){
             const s = getActiveState(); if (!s) return;
             let min = Infinity, max = -Infinity;
@@ -802,7 +849,11 @@
                     const s = getActiveState();
                     if (!s) return;
                     
-                    const newVScale = parseEng(e.target.value);
+                    let newVScale = parseEng(e.target.value);
+                    if (displayOptions.discreteZoom) {
+                        newVScale = snapToCommonScale(newVScale);
+                    }
+
                     const targetChId = e.target.dataset.channel;
                     const chInfo = s.channelInfo[targetChId];
 
@@ -812,10 +863,8 @@
                         chInfo.vMin = vCenter - newVSpan / 2;
                         chInfo.vMax = vCenter + newVSpan / 2;
                         draw();
-                        updateControlsFromView(s);
-                    } else {
-                        updateControlsFromView(s);
                     }
+                    updateControlsFromView(s); // Update input to snapped value
                 });
             });
         }
@@ -857,7 +906,7 @@
 
         function handleFileSelect(e) { for (const file of e.target.files) { if(file.name.toLowerCase().endsWith('.wfm')) loadFile(file); } e.target.value = ''; }
         
-        async function loadFile(file) {
+async function loadFile(file) {
             statusText.textContent=`Loading ${file.name}...`;
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -886,11 +935,19 @@
                         throw new Error("Invalid or unsupported WFM file format (parser validation failed).");
                     }
                     
-                    const loadOptions = await showLoadOptionsModal(parser, file.name);
-
-                    if (!loadOptions) {
-                        statusText.textContent = 'File load cancelled.';
-                        return;
+                    // --- MODIFICATION: All scaling multipliers are set to 1 ---
+                    const loadOptions = {
+                        timeMultiplier: 1,
+                        overrides: {}
+                    };
+        
+                    if (parser instanceof RigolWfmParser) {
+                        for (let i = 1; i <= 4; i++) {
+                            if (parser.isChannelWritten(i)) {
+                                const chKey = `channel${i}`;
+                                loadOptions.overrides[chKey] = { multiplier: 1 };
+                            }
+                        }
                     }
                     
                     const newState = createDefaultTabState(file.name, parser, loadOptions.overrides, loadOptions.timeMultiplier);
@@ -916,22 +973,29 @@
             infoDiv.innerHTML = '';
             channelsDiv.innerHTML = '';
 
-            let infoHtml = `
-                <div class="control-item" style="margin-top: 15px; margin-bottom: 20px; background: #4a4a4a; padding: 12px 10px; border-radius: 5px;">
-                    <label for="time_multiplier" class="control-label"><b>Time Scale Multiplier:</b></label>
-                    <input type="number" id="time_multiplier" class="control-input" value="10" style="width:80px;">
-                </div>`;
+            const globalSettingsBox = document.createElement('div');
+            globalSettingsBox.className = 'load-options-channel-item';
+            globalSettingsBox.style.marginBottom = '15px';
+            globalSettingsBox.innerHTML = '<h4>Global Settings</h4>';
+            
+            const timeItem = document.createElement('div');
+            timeItem.className = 'control-item';
+            timeItem.innerHTML = `<label for="time_multiplier" class="control-label"><b>Time Multiplier:</b></label><input type="number" id="time_multiplier" class="control-input" value="10" style="width:80px;">`;
+            globalSettingsBox.appendChild(timeItem);
+            
+            const fileInfoContainer = document.createElement('div');
+            fileInfoContainer.style.marginTop = '10px';
+            let fileInfoHtml = '';
 
             if (parser instanceof RigolWfmParser) {
-                infoHtml += `<div><span>Format:</span> <span>Rigol</span></div>`;
-                infoHtml += `<div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
+                fileInfoHtml += `<div><span>Format:</span> <span>Rigol</span></div><div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
                 for (let i = 1; i <= 4; i++) {
                     if (parser.isChannelWritten(i)) {
                         const chKey = `channel${i}`;
                         const lastMultiplier = lastRigolMultiplier[chKey] || 1000;
                         channelsDiv.innerHTML += `
                             <div class="load-options-channel-item">
-                                <h4>Channel ${i}</h4>
+                                <h4>Channel ${i} Settings</h4>
                                 <div class="control-item">
                                     <span class="control-label">Detected V/div:</span>
                                     <span style="font-family: Consolas;">${formatEng(parser.getVoltageScale(i), 'V')}</span>
@@ -948,11 +1012,11 @@
                     }
                 }
             } else {
-                 infoHtml += `<div><span>Format:</span> <span>Tektronix</span></div>`;
-                 infoHtml += `<div><span>User V/div:</span> <span>${formatEng(parser.getUserVoltsPerDiv(), 'V')}</span></div>`;
-                 infoHtml += `<div><span>User V Offset:</span> <span>${parser.getUserVerticalOffset().toFixed(3)} div</span></div>`;
+                 fileInfoHtml += `<div><span>Format:</span> <span>Tektronix</span></div><div><span>User V/div:</span> <span>${formatEng(parser.getUserVoltsPerDiv(), 'V')}</span></div>`;
             }
-            infoDiv.innerHTML = infoHtml;
+            fileInfoContainer.innerHTML = fileInfoHtml;
+            globalSettingsBox.appendChild(fileInfoContainer);
+            infoDiv.appendChild(globalSettingsBox);
             
             modal.style.display = 'flex';
 
@@ -975,10 +1039,7 @@
                     resolve({ overrides, timeMultiplier });
                 };
 
-                const onCancel = () => {
-                    cleanup();
-                    resolve(null);
-                };
+                const onCancel = () => { cleanup(); resolve(null); };
                 
                 const cleanup = () => {
                     modal.style.display = 'none';
@@ -1146,7 +1207,7 @@
             if (state.drawOrder.length > 0) {
                  document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)';
                  if (state.drawOrder.length > 1) {
-                    document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
+                     document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
                  }
             }
             const radioToCheck = cursorContainer.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`);
@@ -1466,6 +1527,25 @@
                 }
             }
 
+            if (displayOptions.discreteZoom) {
+                if (hoveredChannel) {
+                    const chInfo = state.channelInfo[hoveredChannel];
+                    const vCenter = (chInfo.vMax + chInfo.vMin) / 2;
+                    const vScale = (chInfo.vMax - chInfo.vMin) / Y_DIVS;
+                    const snappedVScale = snapToCommonScale(vScale);
+                    const newVSpan = snappedVScale * Y_DIVS;
+                    chInfo.vMin = vCenter - newVSpan / 2;
+                    chInfo.vMax = vCenter + newVSpan / 2;
+                } else {
+                    const centerIndex = (state.view.startIndex + state.view.endIndex) / 2;
+                    const timeScale = ((state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint) / X_DIVS;
+                    const snappedTimeScale = snapToCommonScale(timeScale);
+                    const newIndexRange = (snappedTimeScale * X_DIVS) / state.metadata.timePerPoint;
+                    state.view.startIndex = centerIndex - newIndexRange / 2;
+                    state.view.endIndex = centerIndex + newIndexRange / 2;
+                }
+            }
+
             state.view.startIndex = Math.max(0, state.view.startIndex);
             state.view.endIndex = Math.min(state.metadata.numPoints, state.view.endIndex);
             if (state.view.endIndex - state.view.startIndex < 10) { state.view.endIndex = state.view.startIndex + 10; }
@@ -1488,7 +1568,23 @@
         document.getElementById('discreteZoomCheckbox').addEventListener('change', e => { displayOptions.discreteZoom = e.target.checked; });
         document.getElementById('relativeTimeCheckbox').addEventListener('change', e => { displayOptions.relativeTime = e.target.checked; draw(); });
         document.getElementById('separateViewCheckbox').addEventListener('change', e => { displayOptions.separateView = e.target.checked; resizeCanvas(); });
-        document.getElementById('timeScale').addEventListener('change', e => { const state = getActiveState(); if (!state) return; const newTimeScalePerDiv = parseEng(e.target.value); if (isNaN(newTimeScalePerDiv) || newTimeScalePerDiv <= 0) { updateControlsFromView(state); return; } const newTimeSpan = newTimeScalePerDiv * X_DIVS; const newIndexRange = newTimeSpan / state.metadata.timePerPoint; const currentCenterIndex = (state.view.startIndex + state.view.endIndex) / 2; state.view.startIndex = Math.max(0, currentCenterIndex - newIndexRange / 2); state.view.endIndex = Math.min(state.metadata.numPoints, currentCenterIndex + newIndexRange / 2); draw(); updateControlsFromView(state); });
+        
+        document.getElementById('timeScale').addEventListener('change', e => { 
+            const state = getActiveState(); if (!state) return; 
+            let newTimeScalePerDiv = parseEng(e.target.value); 
+            if (displayOptions.discreteZoom) {
+                newTimeScalePerDiv = snapToCommonScale(newTimeScalePerDiv);
+            }
+            if (isNaN(newTimeScalePerDiv) || newTimeScalePerDiv <= 0) { updateControlsFromView(state); return; } 
+            const newTimeSpan = newTimeScalePerDiv * X_DIVS; 
+            const newIndexRange = newTimeSpan / state.metadata.timePerPoint; 
+            const currentCenterIndex = (state.view.startIndex + state.view.endIndex) / 2; 
+            state.view.startIndex = Math.max(0, currentCenterIndex - newIndexRange / 2); 
+            state.view.endIndex = Math.min(state.metadata.numPoints, currentCenterIndex + newIndexRange / 2); 
+            draw(); 
+            updateControlsFromView(state); 
+        });
+
         document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT = (s.view.endIndex - s.view.startIndex) * s.metadata.timePerPoint; const startTime = s.view.startIndex * s.metadata.timePerPoint; const firstCh = getVisibleChannels(s)[0]; if(firstCh){const chInfo=s.channelInfo[firstCh]; const spanV=chInfo.vMax-chInfo.vMin; s.cursors.y1=chInfo.vMin+spanV*0.25; s.cursors.y2=chInfo.vMin+spanV*0.75;} s.cursors.x1=startTime+spanT*0.25; s.cursors.x2=startTime+spanT*0.75; trackCursors();} draw(); });
         document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
         document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; activeInteraction = {type: null}; draw(); });
@@ -1528,28 +1624,28 @@
         function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
         
          function setupModals() {
-               const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
-               document.getElementById('aboutBtn').addEventListener('click', () => { 
+              const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
+              document.getElementById('aboutBtn').addEventListener('click', () => { 
                   const date = new Date();
                   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
                   document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)} (Singapore)`; 
                   aboutModal.style.display='flex'; 
-               });
-               document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
-               [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
-               document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
+              });
+              document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
+              [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
+              document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
                   const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isBW: document.getElementById('bwExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
                   executeExport(options); exportModal.style.display = 'none'; 
-               });
+              });
          }
          async function exportToClipboard() {
                const state = getActiveState(); if (!state) return;
                const isBW = document.getElementById('bwCopyCheckbox').checked;
                try {
-                  const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
-                  await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-                  statusText.textContent = 'Copied to clipboard!';
-                  setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
+                   const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
+                   await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+                   statusText.textContent = 'Copied to clipboard!';
+                   setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
                } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
          }
          async function executeExport(options) {
@@ -1557,7 +1653,7 @@
                const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
                const newFilename = `${originalFilename}_export.${options.format}`;
                if (options.format === 'csv') {
-                  alert('CSV export is not fully implemented in this version.'); 
+                   alert('CSV export is not fully implemented in this version.'); 
                } else if (options.format === 'svg') {
                     try {
                         const svgString = generateSVG(options);
@@ -1566,84 +1662,84 @@
                         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
                     } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
                } else {
-                 try {
-                     const blob = await generateImageBlob(options);
-                     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
-                     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                 } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
+                  try {
+                       const blob = await generateImageBlob(options);
+                       const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
+                       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                  } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
                }
          }
          function generateImageBlob(options) {
-            return new Promise((resolve, reject) => {
-               const state = getActiveState(); if (!state) return reject('No active state');
-               const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
-               tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
-               tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
-               tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
-            });
+             return new Promise((resolve, reject) => {
+                const state = getActiveState(); if (!state) return reject('No active state');
+                const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
+                tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
+                tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
+                tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
+             });
          }
         
          function generateSVG(options) {
-            const state = getActiveState();
-            if (!state) return '';
-            const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
-            const PADDING = getDynamicPadding(state);
-            const plotArea = getPlotArea(width, height, state);
+             const state = getActiveState();
+             if (!state) return '';
+             const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
+             const PADDING = getDynamicPadding(state);
+             const plotArea = getPlotArea(width, height, state);
 
-            let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
-            svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
-            svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
-            svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
-            
-            const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
-            const tStart = state.view.startIndex * state.metadata.timePerPoint;
+             let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
+             svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
+             svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
+             svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
+             
+             const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
+             const tStart = state.view.startIndex * state.metadata.timePerPoint;
 
-            for (let i = 0; i <= X_DIVS; i++) {
-                const x = plotArea.x + i / X_DIVS * plotArea.width;
-                svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
-                const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
-                svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
-            }
-            svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
-            
-            for (let i = 0; i <= Y_DIVS; i++) {
-                const y = plotArea.y + i / Y_DIVS * plotArea.height;
-                svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
-            }
+             for (let i = 0; i <= X_DIVS; i++) {
+                 const x = plotArea.x + i / X_DIVS * plotArea.width;
+                 svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
+                 const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
+                 svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
+             }
+             svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
+             
+             for (let i = 0; i <= Y_DIVS; i++) {
+                 const y = plotArea.y + i / Y_DIVS * plotArea.height;
+                 svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
+             }
 
-            const visibleChannels = getVisibleChannels(state);
-            visibleChannels.forEach((chId, i) => {
-                const chInfo = state.channelInfo[chId];
-                const vRange = chInfo.vMax - chInfo.vMin;
-                const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
-                for (let j = 0; j <= Y_DIVS; j++) {
-                    const y = plotArea.y + j/Y_DIVS*plotArea.height;
-                    const v = chInfo.vMax - j/Y_DIVS*vRange;
-                    svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
-                }
-            });
+             const visibleChannels = getVisibleChannels(state);
+             visibleChannels.forEach((chId, i) => {
+                 const chInfo = state.channelInfo[chId];
+                 const vRange = chInfo.vMax - chInfo.vMin;
+                 const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
+                 for (let j = 0; j <= Y_DIVS; j++) {
+                     const y = plotArea.y + j/Y_DIVS*p.height;
+                     const v = chInfo.vMax - j/Y_DIVS*vRange;
+                     svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
+                 }
+             });
 
-            const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
-            const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
-            svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
-            
-            svg += `<g clip-path="url(#clip)">`;
-            visibleChannels.forEach(ch => {
-                const pathData = [];
-                const voltageData = state.waveforms[ch];
-                const startIndex = Math.max(0, Math.floor(state.view.startIndex));
-                const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
-                for(let i = startIndex; i < endIndex; i++) {
-                    const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
-                    pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
-                }
-                svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
-            });
-            svg += `</g>`;
+             const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
+             const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
+             svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
+             
+             svg += `<g clip-path="url(#clip)">`;
+             visibleChannels.forEach(ch => {
+                 const pathData = [];
+                 const voltageData = state.waveforms[ch];
+                 const startIndex = Math.max(0, Math.floor(state.view.startIndex));
+                 const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
+                 for(let i = startIndex; i < endIndex; i++) {
+                     const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
+                     pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
+                 }
+                 svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
+             });
+             svg += `</g>`;
 
-            svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
-            svg += `</svg>`;
-            return svg;
+             svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
+             svg += `</svg>`;
+             return svg;
          }
 
         setupModals();
