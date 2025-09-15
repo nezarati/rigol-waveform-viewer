@@ -1629,6 +1629,7 @@ async function loadFile(file) {
                 const chInfo = state.channelInfo[hoveredChannel];
                 let plotArea, mouseYRatio;
 
+                // Determine the correct plot area and mouse Y position as a ratio (0.0 to 1.0)
                 if (displayOptions.separateView) {
                     const visibleChannels = getVisibleChannels(state);
                     const chIndex = visibleChannels.indexOf(hoveredChannel);
@@ -1645,15 +1646,17 @@ async function loadFile(file) {
                         width: width - PADDING.left - PADDING.right,
                         height: individualPlotHeight
                     };
-                    mouseYRatio = Math.max(0, Math.min(1, 1 - ((e.offsetY - plotArea.y) / plotArea.height)));
+                    mouseYRatio = Math.max(0, Math.min(1, (e.offsetY - plotArea.y) / plotArea.height));
                 } else {
                     plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
-                    mouseYRatio = Math.max(0, Math.min(1, 1 - ((e.offsetY - plotArea.y) / plotArea.height)));
+                    mouseYRatio = Math.max(0, Math.min(1, (e.offsetY - plotArea.y) / plotArea.height));
                 }
 
-                const pivotV = chInfo.vMin + (chInfo.vMax - chInfo.vMin) * mouseYRatio;
+                // The voltage value at the mouse pointer's location, which will be our pivot point
+                const pivotV = chInfo.vMax - (chInfo.vMax - chInfo.vMin) * mouseYRatio;
                 let newVSpan;
 
+                // Calculate the new vertical span based on zoom direction and whether snapping is enabled
                 if (displayOptions.discreteZoom) {
                     const vScale = (chInfo.vMax - chInfo.vMin) / Y_DIVS;
                     const newSnappedVScale = getNextSnapScale(vScale, e.deltaY);
@@ -1663,8 +1666,9 @@ async function loadFile(file) {
                     newVSpan = (chInfo.vMax - chInfo.vMin) * z;
                 }
                 
-                chInfo.vMin = pivotV - newVSpan * (1 - mouseYRatio);
+                // CORRECTED LOGIC: Recalculate vMax and vMin based on the pivot point
                 chInfo.vMax = pivotV + newVSpan * mouseYRatio;
+                chInfo.vMin = pivotV - newVSpan * (1 - mouseYRatio);
 
             } else { // X-Axis Zoom/Pan
                 if (e.shiftKey) { // Pan
@@ -1692,9 +1696,12 @@ async function loadFile(file) {
                 }
             }
 
+            // Ensure view stays within data boundaries
             state.view.startIndex = Math.max(0, state.view.startIndex);
             state.view.endIndex = Math.min(state.metadata.numPoints, state.view.endIndex);
-            if (state.view.endIndex - state.view.startIndex < 10) { state.view.endIndex = state.view.startIndex + 10; }
+            if (state.view.endIndex - state.view.startIndex < 10) { 
+                state.view.endIndex = state.view.startIndex + 10; 
+            }
             
             updateControlsFromView(state);
             draw();
