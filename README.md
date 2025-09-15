@@ -3,7 +3,7 @@
 [![License: CC BY-NC-SA 4.0](https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 ![Maintained: Yes](https://img.shields.io/badge/Maintained%3F-yes-green.svg)
 
-🌐 **Try it Live**: [**nezarati.github.io/rigol-waveform-viewer**](https://nezarati.github.io/rigol-waveform-viewer/index.html)
+🌐 **Try it Live**: [**nezarati.github.io/rigol-waveform-viewer**](https://nezarati.github.io/waveform-viewer/index.html)
 
 A powerful, self-contained HTML-based tool for viewing and analyzing binary waveform files (`.wfm`) from **Rigol and Tektronix oscilloscopes**. This viewer runs entirely in your web browser with zero installation, providing an immediate, cross-platform solution for engineers, students, and hobbyists.
 
