@@ -2,8 +2,12 @@
 
 [![License: CC BY-NC-SA 4.0](https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 ![Maintained: Yes](https://img.shields.io/badge/Maintained%3F-yes-green.svg)
+![Vanilla JS](https://img.shields.io/badge/JavaScript-Vanilla-yellow?logo=javascript)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white)
 
-🌐 **Try it Live**: [**nezarati.github.io/rigol-waveform-viewer**](https://nezarati.github.io/waveform-viewer/index.html)
+
+🌐 **Try it Live**: [**nezarati.github.io/waveform-viewer**](https://nezarati.github.io/waveform-viewer/index.html)
 
 A powerful, self-contained HTML-based tool for viewing and analyzing binary waveform files (`.wfm`) from **Rigol and Tektronix oscilloscopes**. This viewer runs entirely in your web browser with zero installation, providing an immediate, cross-platform solution for engineers, students, and hobbyists.
 
@@ -36,6 +40,7 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
         * In separate view, drag a subplot to pan it **vertically independently**.
         * Click and drag a specific waveform trace to adjust its vertical offset.
     * **Axis-Specific Zoom**: Hover your mouse over an axis and use the **Mouse Wheel** to zoom that axis independently. Works for the time (bottom) axis and for each individual channel's voltage (left) axis.
+    * **Snap to Common Scales**: An optional mode that provides a reliable, stepped zoom experience through standard `1-2-5` scale values (e.g., 1ms, 2ms, 5ms).
     * **Area Zoom**: Press the `Z` key to activate zoom mode, then click and drag to select and zoom into a specific region.
 * **View Controls**:
     * **Fit & Reset View**:
@@ -62,9 +67,15 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
 ***
 
 ### ✒️ Annotations
-* **Quick Measurement / Area Annotation**: Hold `Shift` + `Drag` to draw a measurement box showing the region's $\Delta t$ and $\Delta V$. If **Annotate Mode** is active, the box becomes a persistent annotation upon release.
+* **Selectable Measurement Scale**: Choose which channel's vertical scale to use for all `ΔV` measurements.
+    * **Toolbar Control**: Select the active channel using the **"Measure Using: Ch1, Ch2..."** buttons in the top toolbar.
+    * **Keyboard Shortcut**: Instantly switch between channels by pressing the `1`, `2`, `3`, or `4` keys.
+* **Quick Measurement / Area Annotation**: Hold `Shift` + `Drag` to draw a measurement box showing `Δt`, `ΔV`, and frequency ($1/\Delta t$). The box is colored based on the selected measurement channel. If **Annotate Mode** is active, the box becomes a persistent annotation upon release.
 * **Text Annotation**: Press `T` to enter text mode and click on the plot to add labels.
-* **Manage Annotations**: Select annotations to move or resize them. Press `Delete` to remove a selected annotation.
+* **Manage Annotations**:
+    * Select annotations to move them.
+    * Press `Delete` to remove a selected annotation.
+    * Press `Ctrl` + `H` to hide or show all annotations on the chart.
 
 ***
 
@@ -77,6 +88,17 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
         * **Black & White**: Creates a high-contrast, printer-friendly version.
         * **IEEE Style**: Formats the plot for academic publications (specific size, `10pt Times New Roman` font, simplified colors).
         * **Measurements Below Plot**: Option to place the measurement table neatly at the bottom.
+
+***
+
+## Technical Details
+
+This viewer is intentionally designed as a single, self-contained `index.html` file for maximum portability and simplicity. There are no external dependencies, no build steps, and no installation required.
+
+* **Core Technology**: The application is built with vanilla **HTML5**, **CSS3**, and **JavaScript (ES6+)**.
+* **Rendering Engine**: All waveform plotting, grids, and annotations are rendered on the **HTML5 Canvas API**, providing high-performance graphics directly in the browser.
+* **Binary File Parsing**: The viewer includes custom-built parsers for the Rigol and Tektronix `.wfm` formats. It uses the `FileReader` API to load files into an `ArrayBuffer` and then directly manipulates the binary data using `DataView` to extract waveform points and metadata according to the manufacturers' file specifications.
+* **State Management**: The application state (view offsets, zoom levels, cursor positions, annotations, etc.) is managed in a simple JavaScript object. For multi-file support, an array of these state objects is maintained, with each tab corresponding to an element in the array.
 
 ***
 
@@ -111,12 +133,14 @@ If your oscilloscope model is not listed, it is still likely to work. Please ope
 | Full Reset View | `Double-Click` |
 | Pan Chart (X & Y) | `Mouse Drag` |
 | Zoom on Axis (X or Y) | `Mouse Wheel` over axis |
-| **Actions** | |
-| Toggle Area Zoom Mode (1-time use) | `Z` Key |
-| Copy to Clipboard | `Ctrl` + `C` |
+| **Actions & Annotation** | |
+| Toggle Area Zoom Mode | `Z` Key |
+| Hide/Show All Annotations | `Ctrl` + `H` |
+| Select Annotation Scale | `1`, `2`, `3`, `4` Keys |
 | Add Text Annotation | `T` Key |
 | Quick Measure / Area Annotation | `Shift` + `Mouse Drag` |
 | Delete Selected Annotation | `Delete` Key |
+| Copy to Clipboard | `Ctrl` + `C` |
 
 ***
 
