@@ -170,6 +170,7 @@
                 <button class="tool-button" id="cursorBtn"><i class="fas fa-ruler-combined"></i> Cursors</button>
                 <button class="tool-button" id="annotateBtn"><i class="fa-solid fa-square-pen"></i> Annotate</button>
                 <button class="tool-button" id="clearAnnotationsBtn" style="display: none;"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                <div id="annotationChannelSelector" style="display: flex; align-items: center; gap: 5px; margin-left: 10px; border-left: 1px solid #555; padding-left: 16px;"></div>
                 <button class="tool-button" id="aboutBtn" style="margin-left: auto;"><i class="fas fa-info-circle"></i> About</button>
             </div>
             <div class="display-area" id="displayArea"><div class="waveform-container" id="waveformContainer"><canvas id="waveformCanvas"></canvas></div></div>
@@ -192,6 +193,8 @@
                 <li><span>Fit Y-Axis (Channel or All)</span><code>F Key</code></li>
                 <li><span>Full Reset View</span><code>Double Click</code></li>
                 <li><span>Toggle Area Zoom Mode (1-time use)</span><code>Z Key</code></li>
+                <li><span>Hide/Show Annotations</span><code>Ctrl + H</code></li>
+                <li><span>Select Annotation Scale</span><code>1, 2, 3, 4 Keys</code></li>
                 <li><span>Pan Chart (X & Y)</span><code>Mouse Drag (empty area)</code></li>
                 <li><span>Move Channel (Y-Axis)</span><code>Mouse Drag (on trace)</code></li>
                 <li><span>Zoom (X-Axis)</span><code>Scroll over Chart</code></li>
@@ -210,38 +213,38 @@
             <h2>Export Waveform</h2>
              <div class="export-options-container" style="display: flex; flex-direction: column; gap: 20px;">
                   <div>
-                    <h3 style="margin-bottom: 8px;">Content</h3>
-                    <label style="margin-right: 15px;"><input type="radio" name="content" value="current" checked> Current View</label>
-                    <label><input type="radio" name="content" value="all"> All Data</label>
+                      <h3 style="margin-bottom: 8px;">Content</h3>
+                      <label style="margin-right: 15px;"><input type="radio" name="content" value="current" checked> Current View</label>
+                      <label><input type="radio" name="content" value="all"> All Data</label>
                   </div>
                   <div>
-                    <h3 style="margin-bottom: 8px;">Format</h3>
-                    <label style="margin-right: 15px;"><input type="radio" name="format" value="png" checked> PNG</label>
-                    <label style="margin-right: 15px;"><input type="radio" name="format" value="svg"> SVG</label>
-                    <label><input type="radio" name="format" value="csv"> CSV</label>
+                      <h3 style="margin-bottom: 8px;">Format</h3>
+                      <label style="margin-right: 15px;"><input type="radio" name="format" value="png" checked> PNG</label>
+                      <label style="margin-right: 15px;"><input type="radio" name="format" value="svg"> SVG</label>
+                      <label><input type="radio" name="format" value="csv"> CSV</label>
                   </div>
                   <div>
-                    <h3 style="margin-bottom: 8px;">Include & Style</h3>
-                    <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
-                    <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
-                    <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
-                    <label style="margin-right: 15px;"><input type="checkbox" id="bwExportCheckbox"> Black & White</label>
-                    <br><br>
-                    <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
+                      <h3 style="margin-bottom: 8px;">Include & Style</h3>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="bwExportCheckbox"> Black & White</label>
+                      <br><br>
+                      <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
                   </div>
                   <div>
-                    <label><input type="checkbox" id="ieeeStyleCheckbox"> <b>Use IEEE Style (Publication)</b></label>
-                    <div class="ieee-options">
-                        <p>Font: Times New Roman, 10pt<br>Background: White</p>
-                        <div class="control-item" style="margin-top: 15px; margin-bottom: 5px;">
-                            <label for="ieeeWidth" class="control-label">Width (inches):</label>
-                            <input type="number" id="ieeeWidth" value="3.45" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                        </div>
-                        <div class="control-item">
-                            <label for="ieeeHeight" class="control-label">Height (inches):</label>
-                            <input type="number" id="ieeeHeight" value="2.5" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
-                        </div>
-                    </div>
+                      <label><input type="checkbox" id="ieeeStyleCheckbox"> <b>Use IEEE Style (Publication)</b></label>
+                      <div class="ieee-options">
+                          <p>Font: Times New Roman, 10pt<br>Background: White</p>
+                          <div class="control-item" style="margin-top: 15px; margin-bottom: 5px;">
+                              <label for="ieeeWidth" class="control-label">Width (inches):</label>
+                              <input type="number" id="ieeeWidth" value="3.45" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                          </div>
+                          <div class="control-item">
+                              <label for="ieeeHeight" class="control-label">Height (inches):</label>
+                              <input type="number" id="ieeeHeight" value="2.5" step="0.05" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                          </div>
+                      </div>
                   </div>
              </div>
             <div class="modal-footer">
@@ -395,7 +398,9 @@
                 drawOrder: [],
                 view: { startIndex: 0, endIndex: numPoints },
                 cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
-                annotations: [], textAnnotations: [], annotationMode: false
+                annotations: [], textAnnotations: [], annotationMode: false,
+                annotationsVisible: true,
+                annotationChannel: null
             };
 
             if (parser instanceof TekWfmParser) {
@@ -432,6 +437,9 @@
                         }
                     }
                 }
+            }
+            if (newState.drawOrder.length > 0) {
+                newState.annotationChannel = newState.drawOrder[0];
             }
             return newState;
         }
@@ -567,12 +575,12 @@ function draw() {
                         const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
                         if (w > 5 && h > 5) {
                             let p_area = null;
-                            let dragRefCh = getVisibleChannels(state)[0];
+                            const dragRefCh = state.annotationChannel || getVisibleChannels(state)[0];
 
                             if (displayOptions.separateView && visibleChannels.length > 0) {
                                 const PADDING = getDynamicPadding(state);
                                 const totalPlotHeight = height - PADDING.top - PADDING.bottom;
-                                const totalGapHeight = (visibleChannels.length - 1) * SEPARATE_VIEW_GAP;
+                                const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
                                 const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
                                 if (individualPlotHeight > 0) {
                                     const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
@@ -580,7 +588,6 @@ function draw() {
                                     const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
                                     
                                     if (blockIndex < visibleChannels.length) {
-                                        dragRefCh = visibleChannels[blockIndex];
                                         p_area = {
                                             x: PADDING.left,
                                             y: PADDING.top + blockIndex * blockHeight,
@@ -594,15 +601,43 @@ function draw() {
                             }
 
                             if (dragRefCh && p_area) {
+                                const chInfo = state.channelInfo[dragRefCh];
                                 const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, dragRefCh, p_area);
                                 const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, dragRefCh, p_area);
                                 const dt = Math.abs(t_end - t_start);
                                 const dV = Math.abs(v_end - v_start);
                                 const freq = dt > 0 ? 1 / dt : 0;
-                                ctx.fillStyle = '#ffc107'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'left';
-                                const x = Math.min(dragStart.x, dragEnd.x) + 5, y = Math.min(dragStart.y, dragEnd.y) - 8;
-                                ctx.textBaseline = 'bottom';
-                                ctx.fillText(`Δt: ${formatEng(dt, 's')} (${formatEng(freq, 'Hz')}), ΔV: ${formatEng(dV, state.channelInfo[dragRefCh].units)}`, x, y);
+                                
+                                const bgColor = hexToRgba(chInfo.color, 0.2);
+                                const textColor = chInfo.color;
+
+                                const text1 = `Δt: ${formatEng(dt, 's')}`;
+                                const text2 = `1/Δt: ${formatEng(freq, 'Hz')}`;
+                                const text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
+                                
+                                ctx.font = '13px Segoe UI';
+                                const w1 = ctx.measureText(text1).width;
+                                const w2 = ctx.measureText(text2).width;
+                                const w3 = ctx.measureText(text3).width;
+                                const boxWidth = Math.max(w1, w2, w3) + 20;
+                                const boxHeight = 70;
+                                let boxX = Math.max(dragStart.x, dragEnd.x) + 10;
+                                let boxY = dragEnd.y - boxHeight / 2;
+
+                                if (boxX + boxWidth > width) { boxX = Math.min(dragStart.x, dragEnd.x) - boxWidth - 10; }
+                                if (boxY < 0) { boxY = 5; }
+                                if (boxY + boxHeight > height) { boxY = height - boxHeight - 5; }
+
+                                ctx.fillStyle = bgColor;
+                                ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+                                
+                                ctx.fillStyle = textColor;
+                                ctx.font = ` 13px Segoe UI`;
+                                ctx.textAlign = 'left';
+                                ctx.textBaseline = 'top';
+                                ctx.fillText(text1, boxX + 10, boxY + 5);
+                                ctx.fillText(text2, boxX + 10, boxY + 25);
+                                ctx.fillText(text3, boxX + 10, boxY + 45);
                             }
                         }
                     }
@@ -732,8 +767,62 @@ function draw() {
         function drawStatsTable(context, state, options) { const { x, y, isExport, colors } = options; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0) return { width: 0, height: 0 }; const activeMeasures = {}; if (isExport) { activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true; } else { activeMeasures.max = document.getElementById('showMaxCheckbox').checked; activeMeasures.min = document.getElementById('showMinCheckbox').checked; activeMeasures.avg = document.getElementById('showAvgCheckbox').checked; activeMeasures.rms = document.getElementById('showRmsCheckbox').checked; } const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return { width: 0, height: 0 }; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = isExport ? 8 : 10; const lineHeight = isExport ? 20 : 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding); if (!x && !y) return { width: tableWidth, height: tableHeight }; context.fillStyle = colors.bg; context.fillRect(x, y, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(x, y, tableWidth, tableHeight); let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2); rows.forEach((rowKey, rowIndex) => { let currentX = x; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = x + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke(); currentX += colWidths[i]; } return { width: tableWidth, height: tableHeight }; }
         function drawStats(plotArea, state) { if (!state || Object.keys(state.waveforms).length === 0) return; drawStatsTable(ctx, state, { x: plotArea.x + 10, y: plotArea.y + 10, isExport: false, colors: { bg: 'rgba(0, 0, 0, 0.6)', grid: '#555555', text: '#fff' } }); }
         function drawCursors(context, plotArea, state) { const { view, cursors } = state; context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = '#f0ad4e'; const refCh = getVisibleChannels(state)[0] || Object.keys(state.channelInfo)[0]; const x1_s = dataToScreen({time: cursors.x1, voltage: 0}, view, state, refCh, plotArea).x, x2_s = dataToScreen({time: cursors.x2, voltage: 0}, view, state, refCh, plotArea).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = '#32f0ad'; const y1_s = dataToScreen({time: 0, voltage: cursors.y1}, view, state, refCh, plotArea).y, y2_s = dataToScreen({time: 0, voltage: cursors.y2}, view, state, refCh, plotArea).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(state); }
-        function drawAnnotations(context, targetView, plotArea, state, annotations) { const handleSize = 8; const refCh = getVisibleChannels(state)[0]; if(!refCh) return; annotations.forEach((box, index) => { const p1 = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, refCh, plotArea); const p2 = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, refCh, plotArea); const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index; context.strokeStyle = isSelected ? '#ffffff' : '#ffc107'; context.fillStyle = 'rgba(255, 193, 7, 0.15)'; context.lineWidth = isSelected ? 2 : 1; context.fillRect(x, y, w, h); context.strokeRect(x, y, w, h); const dt = box.t2 - box.t1, dV = box.v2 - box.v1; context.fillStyle = isSelected ? '#ffffff' : '#ffc107'; context.font = '10pt "Times New Roman"'; context.textAlign = 'left'; const placeTextOutside = (y + h > plotArea.y + plotArea.height - 30) || h < 35; let textY, textBaseline; if (placeTextOutside) { textY = y - 5; textBaseline = 'bottom'; } else { textY = y + 5; textBaseline = 'top'; } context.textBaseline = textBaseline; context.fillText(`Δt: ${formatEng(dt, 's')}`, x + 5, textY); context.fillText(`ΔV: ${formatEng(dV, 'V')}`, x + 5, textY + (placeTextOutside ? -15 : 15)); if(isSelected && context === ctx){ context.fillStyle = '#ffffff'; context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize); } }); }
-        function drawTextAnnotations(context, targetView, plotArea, state, textAnnotations) { const refCh = getVisibleChannels(state)[0]; if(!refCh) return; textAnnotations.forEach((ann, index) => { const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, refCh, plotArea); const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index; context.font = '14px Segoe UI'; const textWidth = context.measureText(ann.text).width; context.fillStyle = 'rgba(0, 0, 0, 0.6)'; context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22); if (isSelected && context === ctx) { context.strokeStyle = '#00bcf2'; context.lineWidth = 2; context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22); } context.fillStyle = '#f0ad4e'; context.textAlign = 'left'; context.textBaseline = 'middle'; context.fillText(ann.text, pos.x + 5, pos.y - 7); }); }
+        function drawAnnotations(context, targetView, plotArea, state, annotations) { 
+            if (!state.annotationsVisible) return;
+            const handleSize = 8;
+            const refCh = getVisibleChannels(state)[0]; 
+            if(!refCh) return; 
+            annotations.forEach((box, index) => { 
+                const boxChannelId = box.channel || refCh;
+                const chInfo = state.channelInfo[boxChannelId];
+                if (!chInfo) return;
+
+                // Use the reference channel just for screen positioning
+                const p1_screen = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, refCh, plotArea); 
+                const p2_screen = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, refCh, plotArea); 
+
+                // For the drawing, convert the stored data points using the annotation's own channel context
+                const p1 = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, boxChannelId, plotArea);
+                const p2 = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, boxChannelId, plotArea);
+
+                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); 
+                const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); 
+
+                const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index; 
+                context.strokeStyle = isSelected ? '#ffffff' : chInfo.color; 
+                context.fillStyle = hexToRgba(chInfo.color, 0.08); 
+                context.lineWidth = isSelected ? 2 : 1; 
+                context.fillRect(x, y, w, h); 
+                context.strokeRect(x, y, w, h); 
+
+                const dt = Math.abs(box.t2 - box.t1), dV = Math.abs(box.v2 - box.v1), freq = dt > 0 ? 1/dt : 0;
+                const text1 = `Δt: ${formatEng(dt, 's')}`;
+                const text2 = `1/Δt: ${formatEng(freq, 'Hz')}`;
+                const text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
+                
+                context.font = '12px Segoe UI';
+                const textWidth = Math.max(context.measureText(text1).width, context.measureText(text2).width, context.measureText(text3).width);
+                
+                const placeTextOutside = (y - 50 < plotArea.y);
+                let textY;
+                if (placeTextOutside) { textY = y + h + 5; } else { textY = y - 55; }
+                
+                context.fillStyle = hexToRgba(chInfo.color, 0.2);
+                context.fillRect(x, textY, textWidth + 10, 50);
+
+                context.fillStyle = chInfo.color;
+                context.font = '12px Segoe UI';
+                context.textAlign = 'left'; 
+                context.textBaseline = 'top';
+                context.fillText(text1, x + 5, textY + 4); 
+                context.fillText(text2, x + 5, textY + 19); 
+                context.fillText(text3, x + 5, textY + 34); 
+
+                if(isSelected && context === ctx){ context.fillStyle = '#ffffff'; context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize); } }); 
+        }
+        function drawTextAnnotations(context, targetView, plotArea, state, textAnnotations) { 
+            if (!state.annotationsVisible) return;
+            const refCh = getVisibleChannels(state)[0]; if(!refCh) return; textAnnotations.forEach((ann, index) => { const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, refCh, plotArea); const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index; context.font = '14px Segoe UI'; const textWidth = context.measureText(ann.text).width; context.fillStyle = 'rgba(0, 0, 0, 0.6)'; context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22); if (isSelected && context === ctx) { context.strokeStyle = '#00bcf2'; context.lineWidth = 2; context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22); } context.fillStyle = '#f0ad4e'; context.textAlign = 'left'; context.textBaseline = 'middle'; context.fillText(ann.text, pos.x + 5, pos.y - 7); }); }
 
         function snapToCommonScale(value) {
             if (value <= 0) return value;
@@ -743,6 +832,41 @@ function draw() {
             if (normalized < 3.5) return 2 * power;
             if (normalized < 7.5) return 5 * power;
             return 10 * power;
+        }
+
+        const commonScaleSteps = [1, 2, 5];
+        function getNextSnapScale(value, direction) {
+            if (value <= 0) return value;
+            const power = Math.pow(10, Math.floor(Math.log10(value)));
+            let mantissa = value / power;
+
+            let currentIndex = -1;
+            let minDiff = Infinity;
+            commonScaleSteps.forEach((step, i) => {
+                const diff = Math.abs(mantissa - step);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    currentIndex = i;
+                }
+            });
+
+            if (direction < 0) { // Zoom in (mouse wheel scrolls up, deltaY is negative)
+                if (mantissa < commonScaleSteps[currentIndex] + 1e-9) { // If we are at a step, go to the next smaller one
+                    currentIndex--;
+                }
+                if (currentIndex < 0) {
+                    return 5 * (power / 10);
+                }
+                return commonScaleSteps[currentIndex] * power;
+            } else { // Zoom out
+                if (mantissa > commonScaleSteps[currentIndex] - 1e-9) { // If we are at a step, go to the next bigger one
+                    currentIndex++;
+                }
+                if (currentIndex >= commonScaleSteps.length) {
+                    return 1 * (power * 10);
+                }
+                return commonScaleSteps[currentIndex] * power;
+            }
         }
 
         function fullResetView(){
@@ -940,7 +1064,7 @@ async function loadFile(file) {
                         timeMultiplier: 1,
                         overrides: {}
                     };
-        
+    
                     if (parser instanceof RigolWfmParser) {
                         for (let i = 1; i <= 4; i++) {
                             if (parser.isChannelWritten(i)) {
@@ -1100,6 +1224,7 @@ async function loadFile(file) {
         function updateUIFromState() {
             const state = getActiveState();
             const fileDetailsPanel = document.getElementById('fileDetailsPanel');
+            const annotationSelector = document.getElementById('annotationChannelSelector');
 
             updateChannelScaleControls(state);
             if (!state) {
@@ -1110,10 +1235,12 @@ async function loadFile(file) {
                 document.getElementById('annotateBtn').classList.remove('active');
                 document.getElementById('clearAnnotationsBtn').style.display = 'none';
                 fileDetailsPanel.style.display = 'none';
+                annotationSelector.style.display = 'none';
                 setupChannelUI(null);
                 return;
             }
             
+            annotationSelector.style.display = 'flex';
             document.getElementById('fileInfo').innerHTML = `<div>${state.fileName}</div><div>Points: ${state.metadata.numPoints}</div>`;
             setupChannelUI(state);
             document.getElementById('cursorBtn').classList.toggle('active', state.cursors.enabled);
@@ -1163,12 +1290,16 @@ async function loadFile(file) {
             const btnContainer = document.getElementById('channelButtonContainer');
             const legendContainer = document.getElementById('channelLegendContainer');
             const cursorContainer = document.getElementById('cursorTrackContainer');
+            const annotationSelector = document.getElementById('annotationChannelSelector');
 
             btnContainer.innerHTML = '';
             legendContainer.innerHTML = '';
             cursorContainer.innerHTML = '<label><input type="radio" name="cursorTrack" value="null" checked> None</label>';
+            annotationSelector.innerHTML = '';
 
             if (!state) return;
+            
+            annotationSelector.innerHTML = '<span style="font-size: 13px; color: #ccc;">Select:</span>';
 
             for (const chId in state.channelInfo) {
                 const chNum = chId.replace('channel', '');
@@ -1202,16 +1333,28 @@ async function loadFile(file) {
                     const s = getActiveState(); if (s) { s.cursors.trackingChannel = e.target.value; trackCursors(); draw(); }
                 });
                 cursorContainer.appendChild(radioLabel);
+
+                const selBtn = document.createElement('button');
+                selBtn.className = 'tool-button';
+                selBtn.textContent = `Ch${chNum}`;
+                selBtn.dataset.channel = chId;
+                selBtn.style.padding = '4px 8px';
+                selBtn.style.fontSize = '12px';
+                selBtn.style.minWidth = '50px';
+                selBtn.addEventListener('click', () => setAnnotationChannel(chId));
+                annotationSelector.appendChild(selBtn);
             }
             
             if (state.drawOrder.length > 0) {
                  document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)';
                  if (state.drawOrder.length > 1) {
-                     document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
+                       document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
                  }
             }
             const radioToCheck = cursorContainer.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`);
             if (radioToCheck) radioToCheck.checked = true;
+
+            updateAnnotationChannelUI(state);
         }
 
         function hitTestWaveform(mousePos, state) {
@@ -1425,9 +1568,12 @@ async function loadFile(file) {
                 statusText.textContent = `Loaded: ${state.fileName}`;
             } else if (type === 'measure-drag') {
                 if (state.annotationMode && Math.abs(dragEnd.x - dragStart.x) > 5) {
-                    const {time: t1, voltage: v2} = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: Math.min(dragStart.y, dragEnd.y)}, state.view, state);
-                    const {time: t2, voltage: v1} = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: Math.max(dragStart.y, dragEnd.y)}, state.view, state);
-                    state.annotations.push({ t1, v1, t2, v2 });
+                    const annotationCh = state.annotationChannel || getVisibleChannels(state)[0];
+                    if (annotationCh) {
+                        const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, annotationCh);
+                        const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, annotationCh);
+                        state.annotations.push({ t1: t_start, v1: v_start, t2: t_end, v2: v_end, channel: annotationCh });
+                    }
                 }
             }
 
@@ -1456,7 +1602,6 @@ async function loadFile(file) {
                 const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
                 const relativeY = mouseY - PADDING.top;
                 
-                // Check if the click is inside a gap
                 if (relativeY > 0 && (relativeY % blockHeight) > individualPlotHeight) return null;
 
                 const blockIndex = Math.floor(relativeY / blockHeight);
@@ -1482,7 +1627,6 @@ async function loadFile(file) {
             
             if (hoveredChannel) { // Y-Axis Zoom
                 const chInfo = state.channelInfo[hoveredChannel];
-                const z = e.deltaY < 0 ? 0.85 : 1.15;
                 let plotArea, mouseYRatio;
 
                 if (displayOptions.separateView) {
@@ -1507,42 +1651,44 @@ async function loadFile(file) {
                     mouseYRatio = Math.max(0, Math.min(1, 1 - ((e.offsetY - plotArea.y) / plotArea.height)));
                 }
 
-                const currentVRange = chInfo.vMax - chInfo.vMin;
-                const pivotV = chInfo.vMin + currentVRange * mouseYRatio;
-                chInfo.vMin = pivotV - (currentVRange * z * mouseYRatio);
-                chInfo.vMax = pivotV + (currentVRange * z * (1 - mouseYRatio));
-            } else { // X-Axis Zoom/Pan
-                 const currentTRange = state.view.endIndex - state.view.startIndex;
-                if (e.shiftKey) {
-                    const p = currentTRange * 0.1 * Math.sign(e.deltaY);
-                    state.view.startIndex += p; state.view.endIndex += p;
+                const pivotV = chInfo.vMin + (chInfo.vMax - chInfo.vMin) * mouseYRatio;
+                let newVSpan;
+
+                if (displayOptions.discreteZoom) {
+                    const vScale = (chInfo.vMax - chInfo.vMin) / Y_DIVS;
+                    const newSnappedVScale = getNextSnapScale(vScale, e.deltaY);
+                    newVSpan = newSnappedVScale * Y_DIVS;
                 } else {
+                    const z = e.deltaY < 0 ? 0.85 : 1.15;
+                    newVSpan = (chInfo.vMax - chInfo.vMin) * z;
+                }
+                
+                chInfo.vMin = pivotV - newVSpan * (1 - mouseYRatio);
+                chInfo.vMax = pivotV + newVSpan * mouseYRatio;
+
+            } else { // X-Axis Zoom/Pan
+                if (e.shiftKey) { // Pan
+                    const p = (state.view.endIndex - state.view.startIndex) * 0.1 * Math.sign(e.deltaY);
+                    state.view.startIndex += p; 
+                    state.view.endIndex += p;
+                } else { // Zoom
                     const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
                     let mouseXRatio = (e.offsetX - plotArea.x) / plotArea.width;
                     mouseXRatio = Math.max(0, Math.min(1, mouseXRatio));
-                    const z = e.deltaY < 0 ? 0.85 : 1.15;
-                    const pivotT = state.view.startIndex + currentTRange * mouseXRatio;
-                    state.view.startIndex = pivotT - (currentTRange * z * mouseXRatio);
-                    state.view.endIndex = pivotT + (currentTRange * z * (1 - mouseXRatio));
-                }
-            }
-
-            if (displayOptions.discreteZoom) {
-                if (hoveredChannel) {
-                    const chInfo = state.channelInfo[hoveredChannel];
-                    const vCenter = (chInfo.vMax + chInfo.vMin) / 2;
-                    const vScale = (chInfo.vMax - chInfo.vMin) / Y_DIVS;
-                    const snappedVScale = snapToCommonScale(vScale);
-                    const newVSpan = snappedVScale * Y_DIVS;
-                    chInfo.vMin = vCenter - newVSpan / 2;
-                    chInfo.vMax = vCenter + newVSpan / 2;
-                } else {
-                    const centerIndex = (state.view.startIndex + state.view.endIndex) / 2;
-                    const timeScale = ((state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint) / X_DIVS;
-                    const snappedTimeScale = snapToCommonScale(timeScale);
-                    const newIndexRange = (snappedTimeScale * X_DIVS) / state.metadata.timePerPoint;
-                    state.view.startIndex = centerIndex - newIndexRange / 2;
-                    state.view.endIndex = centerIndex + newIndexRange / 2;
+                    const pivotT = state.view.startIndex + (state.view.endIndex - state.view.startIndex) * mouseXRatio;
+                    
+                    let newIndexRange;
+                    if (displayOptions.discreteZoom) {
+                        const timeScale = ((state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint) / X_DIVS;
+                        const snappedTimeScale = getNextSnapScale(timeScale, e.deltaY);
+                        newIndexRange = (snappedTimeScale * X_DIVS) / state.metadata.timePerPoint;
+                    } else {
+                        const z = e.deltaY < 0 ? 0.85 : 1.15;
+                        newIndexRange = (state.view.endIndex - state.view.startIndex) * z;
+                    }
+                    
+                    state.view.startIndex = pivotT - newIndexRange * mouseXRatio;
+                    state.view.endIndex = pivotT + newIndexRange * (1 - mouseXRatio);
                 }
             }
 
@@ -1603,6 +1749,17 @@ async function loadFile(file) {
                 }
             }
             if (e.ctrlKey && e.key.toLowerCase() === 'c') { e.preventDefault(); exportToClipboard(); }
+            if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+                e.preventDefault();
+                if (state) {
+                    state.annotationsVisible = !state.annotationsVisible;
+                    draw();
+                }
+            }
+            const num = parseInt(e.key);
+            if (!e.ctrlKey && !e.altKey && !isNaN(num) && num >= 1 && num <= 4) {
+                setAnnotationChannel(`channel${num}`);
+            }
             if (e.key === 'Delete' && activeInteraction.type && activeInteraction.index > -1) { if(!state) return; if (activeInteraction.type === 'annotation') { state.annotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'textAnnotation') { state.textAnnotations.splice(activeInteraction.index, 1); } activeInteraction = {type: null}; draw(); }
             if (e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); }
             if (e.key.toLowerCase() === 'z') { if (state && !textAnnotationMode) { zoomModeEnabled = true; canvas.style.cursor = 'zoom-in'; statusText.textContent = 'Zoom Mode: Click and drag on the chart to zoom into an area.'; } }
@@ -1623,124 +1780,148 @@ async function loadFile(file) {
         function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode && s.annotationMode) s.annotationMode = false; canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
         function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
         
+        function setAnnotationChannel(chId) {
+            const state = getActiveState();
+            if (state && state.channelInfo[chId]) {
+                state.annotationChannel = chId;
+                updateAnnotationChannelUI(state);
+            }
+        }
+
+        function updateAnnotationChannelUI(state) {
+            if (!state || !state.annotationChannel || !state.channelInfo[state.annotationChannel]) return;
+            const buttons = document.querySelectorAll('#annotationChannelSelector .tool-button');
+            buttons.forEach(btn => {
+                const isActive = btn.dataset.channel === state.annotationChannel;
+                const chInfo = state.channelInfo[btn.dataset.channel];
+                btn.style.background = isActive ? chInfo.color : '#5e5e5e';
+                btn.style.opacity = isActive ? '1' : '0.6';
+            });
+        }
+        function hexToRgba(hex, alpha) {
+            let r = 0, g = 0, b = 0;
+            if (hex.length == 4) { r = "0x" + hex[1] + hex[1]; g = "0x" + hex[2] + hex[2]; b = "0x" + hex[3] + hex[3]; } 
+            else if (hex.length == 7) { r = "0x" + hex[1] + hex[2]; g = "0x" + hex[3] + hex[4]; b = "0x" + hex[5] + hex[6]; }
+            return `rgba(${+r},${+g},${+b},${alpha})`;
+        }
          function setupModals() {
-              const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
-              document.getElementById('aboutBtn').addEventListener('click', () => { 
-                  const date = new Date();
-                  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                  document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)} (Singapore)`; 
-                  aboutModal.style.display='flex'; 
-              });
-              document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
-              [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
-              document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
-                  const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isBW: document.getElementById('bwExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
-                  executeExport(options); exportModal.style.display = 'none'; 
-              });
-         }
-         async function exportToClipboard() {
-               const state = getActiveState(); if (!state) return;
-               const isBW = document.getElementById('bwCopyCheckbox').checked;
-               try {
-                   const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
-                   await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-                   statusText.textContent = 'Copied to clipboard!';
-                   setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
-               } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
-         }
-         async function executeExport(options) {
-               const state = getActiveState(); if (!state) return;
-               const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
-               const newFilename = `${originalFilename}_export.${options.format}`;
-               if (options.format === 'csv') {
-                   alert('CSV export is not fully implemented in this version.'); 
-               } else if (options.format === 'svg') {
-                    try {
-                        const svgString = generateSVG(options);
-                        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
-                        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                    } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
-               } else {
+               const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
+               document.getElementById('aboutBtn').addEventListener('click', () => { 
+                   const date = new Date();
+                   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                   document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)} (Singapore)`; 
+                   aboutModal.style.display='flex'; 
+               });
+               document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
+               [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
+               document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
+                   const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isBW: document.getElementById('bwExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
+                   executeExport(options); exportModal.style.display = 'none'; 
+               });
+          }
+          async function exportToClipboard() {
+                  const state = getActiveState(); if (!state) return;
+                  const isBW = document.getElementById('bwCopyCheckbox').checked;
                   try {
-                       const blob = await generateImageBlob(options);
-                       const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
-                       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                  } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
-               }
-         }
-         function generateImageBlob(options) {
+                      const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
+                      await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+                      statusText.textContent = 'Copied to clipboard!';
+                      setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
+                  } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
+          }
+          async function executeExport(options) {
+                  const state = getActiveState(); if (!state) return;
+                  const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+                  const newFilename = `${originalFilename}_export.${options.format}`;
+                  if (options.format === 'csv') {
+                      alert('CSV export is not fully implemented in this version.'); 
+                  } else if (options.format === 'svg') {
+                       try {
+                           const svgString = generateSVG(options);
+                           const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                           const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
+                           document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                       } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
+                  } else {
+                     try {
+                          const blob = await generateImageBlob(options);
+                          const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
+                          document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                     } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
+                  }
+          }
+          function generateImageBlob(options) {
              return new Promise((resolve, reject) => {
-                const state = getActiveState(); if (!state) return reject('No active state');
-                const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
-                tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
-                tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
-                tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
-             });
-         }
+                 const state = getActiveState(); if (!state) return reject('No active state');
+                 const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
+                 tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
+                 tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
+                 tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
+               });
+          }
         
-         function generateSVG(options) {
-             const state = getActiveState();
-             if (!state) return '';
-             const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
-             const PADDING = getDynamicPadding(state);
-             const plotArea = getPlotArea(width, height, state);
+          function generateSVG(options) {
+                 const state = getActiveState();
+                 if (!state) return '';
+                 const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
+                 const PADDING = getDynamicPadding(state);
+                 const plotArea = getPlotArea(width, height, state);
 
-             let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
-             svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
-             svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
-             svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
-             
-             const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
-             const tStart = state.view.startIndex * state.metadata.timePerPoint;
+                 let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
+                 svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
+                 svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
+                 svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
+                 
+                 const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
+                 const tStart = state.view.startIndex * state.metadata.timePerPoint;
 
-             for (let i = 0; i <= X_DIVS; i++) {
-                 const x = plotArea.x + i / X_DIVS * plotArea.width;
-                 svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
-                 const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
-                 svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
-             }
-             svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
-             
-             for (let i = 0; i <= Y_DIVS; i++) {
-                 const y = plotArea.y + i / Y_DIVS * plotArea.height;
-                 svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
-             }
-
-             const visibleChannels = getVisibleChannels(state);
-             visibleChannels.forEach((chId, i) => {
-                 const chInfo = state.channelInfo[chId];
-                 const vRange = chInfo.vMax - chInfo.vMin;
-                 const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
-                 for (let j = 0; j <= Y_DIVS; j++) {
-                     const y = plotArea.y + j/Y_DIVS*p.height;
-                     const v = chInfo.vMax - j/Y_DIVS*vRange;
-                     svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
+                 for (let i = 0; i <= X_DIVS; i++) {
+                      const x = plotArea.x + i / X_DIVS * plotArea.width;
+                      svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
+                      const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
+                      svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
                  }
-             });
-
-             const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
-             const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
-             svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
-             
-             svg += `<g clip-path="url(#clip)">`;
-             visibleChannels.forEach(ch => {
-                 const pathData = [];
-                 const voltageData = state.waveforms[ch];
-                 const startIndex = Math.max(0, Math.floor(state.view.startIndex));
-                 const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
-                 for(let i = startIndex; i < endIndex; i++) {
-                     const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
-                     pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
+                 svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
+                 
+                 for (let i = 0; i <= Y_DIVS; i++) {
+                      const y = plotArea.y + i / Y_DIVS * plotArea.height;
+                      svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
                  }
-                 svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
-             });
-             svg += `</g>`;
 
-             svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
-             svg += `</svg>`;
-             return svg;
-         }
+                 const visibleChannels = getVisibleChannels(state);
+                 visibleChannels.forEach((chId, i) => {
+                      const chInfo = state.channelInfo[chId];
+                      const vRange = chInfo.vMax - chInfo.vMin;
+                      const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
+                      for (let j = 0; j <= Y_DIVS; j++) {
+                          const y = plotArea.y + j/Y_DIVS*p.height;
+                          const v = chInfo.vMax - j/Y_DIVS*vRange;
+                          svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
+                      }
+                 });
+
+                 const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
+                 const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
+                 svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
+                 
+                 svg += `<g clip-path="url(#clip)">`;
+                 visibleChannels.forEach(ch => {
+                      const pathData = [];
+                      const voltageData = state.waveforms[ch];
+                      const startIndex = Math.max(0, Math.floor(state.view.startIndex));
+                      const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
+                      for(let i = startIndex; i < endIndex; i++) {
+                          const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
+                          pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
+                      }
+                      svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
+                 });
+                 svg += `</g>`;
+
+                 svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
+                 svg += `</svg>`;
+                 return svg;
+          }
 
         setupModals();
         new ResizeObserver(resizeCanvas).observe(document.getElementById('waveformContainer'));
