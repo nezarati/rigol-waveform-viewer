@@ -17,7 +17,7 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
 
 ## Screenshot
 
-![Screenshot of the Advanced WFM Waveform Viewer](screenshot.png)
+![Screenshot of the Advanced WFM Waveform Viewer](screenshot1.png)
 
 ***
 
