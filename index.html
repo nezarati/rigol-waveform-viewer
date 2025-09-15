@@ -149,11 +149,11 @@
                   <div class="sub-panel">
                       <div class="control-label" style="margin-bottom: 8px;">Cursor Tracking</div>
                       <div id="cursorTrackContainer" style="display: flex; justify-content: space-around; font-size: 13px; flex-wrap: wrap; gap: 5px;">
-                            <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
-                           </div>
+                              <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
+                            </div>
                       <div style="display: flex; gap: 8px; margin-top: 12px;">
-                            <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
-                            <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
+                              <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
+                              <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
                       </div>
                   </div>
             </div>
@@ -377,11 +377,12 @@
         const PADDING_STATIC = { top: 30, right: 40, bottom: 60 };
         const Y_AXIS_WIDTH = 70;
         const Y_AXIS_WIDTH_SEPARATE = 55;
+        const SEPARATE_VIEW_GAP = 20;
         const CHANNEL_COLORS = ['#00bcf2', '#ff4343', '#8aff8a', '#ff8aff'];
         let lastRigolMultiplier = {};
 
-        function createDefaultTabState(fileName, parser, overrides = {}) {
-            const timePerPoint = parser.getTimeScale();
+        function createDefaultTabState(fileName, parser, overrides = {}, timeMultiplier = 1) {
+            const timePerPoint = parser.getTimeScale() * timeMultiplier;
             const numPoints = parser.getNumDataPoints();
             
             const newState = {
@@ -512,31 +513,34 @@
                 if (displayOptions.separateView && visibleChannels.length > 0) {
                     const PADDING = getDynamicPadding(state);
                     const totalPlotHeight = height - PADDING.top - PADDING.bottom;
-                    const individualPlotHeight = totalPlotHeight / visibleChannels.length;
+                    const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
+                    const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
 
-                    visibleChannels.forEach((ch, index) => {
-                        const plotArea = {
-                            x: PADDING.left,
-                            y: PADDING.top + index * individualPlotHeight,
-                            width: width - PADDING.left - PADDING.right,
-                            height: individualPlotHeight
-                        };
+                    if (individualPlotHeight > 0) {
+                        visibleChannels.forEach((ch, index) => {
+                            const plotArea = {
+                                x: PADDING.left,
+                                y: PADDING.top + index * (individualPlotHeight + SEPARATE_VIEW_GAP),
+                                width: width - PADDING.left - PADDING.right,
+                                height: individualPlotHeight
+                            };
 
-                        drawGrid(plotArea, true, index === visibleChannels.length - 1);
-                        drawAxisLabels(plotArea, state.view, state, ch);
+                            drawGrid(plotArea, true, index === visibleChannels.length - 1);
+                            drawAxisLabels(plotArea, state.view, state, ch);
 
-                        ctx.save();
-                        ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                        ctx.clip();
-                        drawWaveform(state, ch, plotArea);
-                        if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
-                        drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
-                        drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
-                        ctx.restore();
+                            ctx.save();
+                            ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                            ctx.clip();
+                            drawWaveform(state, ch, plotArea);
+                            if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
+                            drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
+                            drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
+                            ctx.restore();
 
-                        ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
-                        ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                    });
+                            ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+                            ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                        });
+                    }
                 } else {
                     const plotArea = getPlotArea(width, height, state);
                     drawGrid(plotArea, false, true);
@@ -889,7 +893,7 @@
                         return;
                     }
                     
-                    const newState = createDefaultTabState(file.name, parser, loadOptions.overrides);
+                    const newState = createDefaultTabState(file.name, parser, loadOptions.overrides, loadOptions.timeMultiplier);
                     const newIndex = tabStates.length;
                     tabStates.push(newState);
                     addTabToUI(file.name, newIndex);
@@ -912,7 +916,12 @@
             infoDiv.innerHTML = '';
             channelsDiv.innerHTML = '';
 
-            let infoHtml = '';
+            let infoHtml = `
+                <div class="control-item" style="margin-top: 15px; margin-bottom: 20px; background: #4a4a4a; padding: 12px 10px; border-radius: 5px;">
+                    <label for="time_multiplier" class="control-label"><b>Time Scale Multiplier:</b></label>
+                    <input type="number" id="time_multiplier" class="control-input" value="10" style="width:80px;">
+                </div>`;
+
             if (parser instanceof RigolWfmParser) {
                 infoHtml += `<div><span>Format:</span> <span>Rigol</span></div>`;
                 infoHtml += `<div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
@@ -932,7 +941,7 @@
                                     <span style="font-family: Consolas;">${formatEng(parser.getVoltageOffset(i), 'V')}</span>
                                 </div>
                                 <div class="control-item">
-                                    <label for="ch${i}_multiplier" class="control-label"><b>Scale Multiplier:</b></label>
+                                    <label for="ch${i}_multiplier" class="control-label"><b>Probe/Scale Multiplier:</b></label>
                                     <input type="number" id="ch${i}_multiplier" data-channel="${chKey}" class="control-input" value="${lastMultiplier}" style="width:80px;">
                                 </div>
                             </div>`;
@@ -961,8 +970,9 @@
                         overrides[chKey] = { multiplier };
                         lastRigolMultiplier[chKey] = multiplier;
                     });
+                    const timeMultiplier = parseFloat(document.getElementById('time_multiplier').value) || 1;
                     cleanup();
-                    resolve({ overrides });
+                    resolve({ overrides, timeMultiplier });
                 };
 
                 const onCancel = () => {
@@ -1290,12 +1300,16 @@
                     if (panStart.vRanges[ch]) {
                         const chInfo = state.channelInfo[ch];
                         const vRange = panStart.vRanges[ch].vMax - panStart.vRanges[ch].vMin;
-                        const totalPlotHeight = canvas.clientHeight - PADDING_STATIC.top - PADDING_STATIC.bottom;
-                        const individualPlotHeight = totalPlotHeight / getVisibleChannels(state).length;
-                        const vPerPixel = vRange / individualPlotHeight;
-                        const vDelta = dy * vPerPixel;
-                        chInfo.vMin = panStart.vRanges[ch].vMin + vDelta;
-                        chInfo.vMax = panStart.vRanges[ch].vMax + vDelta;
+                        const PADDING = getDynamicPadding(state);
+                        const totalPlotHeight = canvas.clientHeight - PADDING.top - PADDING.bottom;
+                        const totalGapHeight = (getVisibleChannels(state).length > 1) ? (getVisibleChannels(state).length - 1) * SEPARATE_VIEW_GAP : 0;
+                        const individualPlotHeight = (totalPlotHeight - totalGapHeight) / getVisibleChannels(state).length;
+                        if (individualPlotHeight > 0) {
+                            const vPerPixel = vRange / individualPlotHeight;
+                            const vDelta = dy * vPerPixel;
+                            chInfo.vMin = panStart.vRanges[ch].vMin + vDelta;
+                            chInfo.vMax = panStart.vRanges[ch].vMax + vDelta;
+                        }
                     }
                 } else if (!displayOptions.separateView) {
                     getVisibleChannels(state).forEach((ch) => {
@@ -1369,17 +1383,27 @@
             const { x: mouseX, y: mouseY } = pos;
             const { width, height } = canvas.getBoundingClientRect();
             const visibleChannels = getVisibleChannels(state);
-            const PADDING = getDynamicPadding(state);
-
+            
             if (displayOptions.separateView) {
-                if (mouseY < PADDING.top || mouseY > height - PADDING.bottom || visibleChannels.length === 0) return null;
+                if (mouseY < PADDING_STATIC.top || mouseY > height - PADDING_STATIC.bottom || visibleChannels.length === 0) return null;
+                const PADDING = getDynamicPadding(state);
                 const totalPlotHeight = height - PADDING.top - PADDING.bottom;
-                const individualPlotHeight = totalPlotHeight / visibleChannels.length;
-                const plotIndex = Math.floor((mouseY - PADDING.top) / individualPlotHeight);
-                if (plotIndex >= 0 && plotIndex < visibleChannels.length) {
-                    return visibleChannels[plotIndex];
+                const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
+                const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
+                if (individualPlotHeight <= 0) return null;
+
+                const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
+                const relativeY = mouseY - PADDING.top;
+                
+                // Check if the click is inside a gap
+                if (relativeY > 0 && (relativeY % blockHeight) > individualPlotHeight) return null;
+
+                const blockIndex = Math.floor(relativeY / blockHeight);
+                if (blockIndex >= 0 && blockIndex < visibleChannels.length) {
+                    return visibleChannels[blockIndex];
                 }
             } else {
+                const PADDING = getDynamicPadding(state);
                 if (mouseX >= PADDING.left) return null;
                 const index = Math.floor((PADDING.left - 10 - mouseX) / Y_AXIS_WIDTH);
                 if (index >= 0 && index < visibleChannels.length) {
@@ -1407,10 +1431,12 @@
                     const { width, height } = canvas.getBoundingClientRect();
                     const PADDING = getDynamicPadding(state);
                     const totalPlotHeight = height - PADDING.top - PADDING.bottom;
-                    const individualPlotHeight = totalPlotHeight / visibleChannels.length;
+                    const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
+                    const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
+                    if (individualPlotHeight <= 0) return;
                     plotArea = {
                         x: PADDING.left,
-                        y: PADDING.top + chIndex * individualPlotHeight,
+                        y: PADDING.top + chIndex * (individualPlotHeight + SEPARATE_VIEW_GAP),
                         width: width - PADDING.left - PADDING.right,
                         height: individualPlotHeight
                     };
@@ -1531,7 +1557,7 @@
                const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
                const newFilename = `${originalFilename}_export.${options.format}`;
                if (options.format === 'csv') {
-                 alert('CSV export is not fully implemented in this version.'); 
+                  alert('CSV export is not fully implemented in this version.'); 
                } else if (options.format === 'svg') {
                     try {
                         const svgString = generateSVG(options);
@@ -1540,11 +1566,11 @@
                         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
                     } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
                } else {
-                  try {
+                 try {
                      const blob = await generateImageBlob(options);
                      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
                      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                  } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
+                 } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
                }
          }
          function generateImageBlob(options) {
