@@ -2388,29 +2388,44 @@
                  setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
              } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
         }
-        async function executeExport(options) {
-             const state = getActiveState(); if (!state) return;
-             const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
-             const newFilename = `${originalFilename}_export.${options.format}`;
-             
-             try {
-                if (options.isIEEE) {
-                    const blob = await generateExportIEEE(options);
-                    downloadBlob(blob, `${originalFilename}_IEEE.png`);
-                } else if (options.format === 'csv') {
-                    generateAndDownloadCSV(options);
-                } else if (options.format === 'svg') {
-                    const svgString = generateExportSVG(options);
-                    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                    downloadBlob(blob, newFilename);
-                } else { // PNG
-                    const blob = await generateImageBlob(options);
-                    downloadBlob(blob, newFilename);
-                }
-             } catch(err) {
-                console.error('Export failed:', err); statusText.textContent = 'Error during export.';
-             }
+        /**
+ * Main export router. This function is called when the user clicks "Export".
+ * It checks the selected options and calls the appropriate generation function.
+ */
+async function executeExport(options) {
+    const state = getActiveState();
+    if (!state) return;
+    const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+
+    // If IEEE style is checked, automatically set format to SVG and ensure a white background.
+    if (options.isIEEE) {
+        options.format = 'svg';
+        options.isWB = true;
+    }
+
+    const newFilename = `${originalFilename}_${options.isIEEE ? 'IEEE' : 'export'}.${options.format}`;
+
+    try {
+        if (options.format === 'csv') {
+            generateAndDownloadCSV(options);
+        } else if (options.format === 'svg') {
+            // This single function now handles both simple and IEEE-styled SVG exports.
+            const svgString = generateExportSVG(options);
+            const blob = new Blob([svgString], {
+                type: 'image/svg+xml;charset=utf-8'
+            });
+            downloadBlob(blob, newFilename);
+        } else { // PNG export
+            const blob = await generateImageBlob(options);
+            downloadBlob(blob, newFilename);
         }
+    } catch (err) {
+        console.error('Export failed:', err);
+        statusText.textContent = 'Error during export.';
+    }
+}
+
+
         function downloadBlob(blob, filename) {
              const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename;
              document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
@@ -2479,14 +2494,240 @@
         }
 
         // SEPARATE EXPORT FUNCTION for SVG
-        function generateExportSVG(options) {
-             const state = getActiveState();
-             if (!state) return '';
-             // This is a placeholder for a more complex SVG generation logic.
-             // It would need to be rewritten to accept color themes like generateImageBlob.
-             alert("SVG export is not fully implemented with new styling options yet.");
-             return `<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><text x="10" y="50">SVG placeholder</text></svg>`;
+/**
+ * Generates an SVG string from the current waveform view based on export options.
+ * @param {object} options - The export settings from the modal.
+ * @returns {string} The complete SVG content as a string.
+ */
+function generateExportSVG(options) {
+    const state = getActiveState();
+    if (!state) return '';
+
+    const isIEEE = options.isIEEE;
+    const DPI = 96; // Standard pixels per inch for sizing.
+    const figWidth = isIEEE ? 3.5 * DPI : canvas.clientWidth;
+    const figHeight = isIEEE ? 3.0 * DPI : canvas.clientHeight;
+
+    // Define styles based on whether it's a simple or IEEE export.
+    const styles = {
+        fontFamily: isIEEE ? "'Times New Roman', Times, serif" : "'Segoe UI', system-ui, sans-serif",
+        fontSize: isIEEE ? '10pt' : '13px',
+        bgColor: options.isWB || isIEEE ? '#ffffff' : '#1e1e1e',
+        fgColor: options.isWB || isIEEE ? '#000000' : '#a0a0a0',
+        gridColor: isIEEE ? 'none' : (options.isWB ? '#cccccc' : '#333'),
+        // For IEEE, use distinct line styles for black & white printing.
+        traceStyles: [
+            { stroke: '#000000', 'stroke-dasharray': 'none' }, // Solid
+            { stroke: '#000000', 'stroke-dasharray': '5 5' },   // Dashed
+            { stroke: '#555555', 'stroke-dasharray': '2 4' },   // Dotted
+            { stroke: '#555555', 'stroke-dasharray': '8 4 2 4' } // Dash-dot
+        ]
+    };
+
+    // Use a temporary copy of the state for manipulation.
+    const tempState = JSON.parse(JSON.stringify(state));
+    Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
+    const view = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
+
+    let svg = `<svg width="${figWidth}" height="${figHeight}" xmlns="http://www.w3.org/2000/svg" style="font-family: ${styles.fontFamily}; font-size: ${styles.fontSize};">`;
+    svg += `<rect x="0" y="0" width="${figWidth}" height="${figHeight}" fill="${styles.bgColor}" />`;
+
+    // Calculate the plot area with padding for axes and titles.
+    const PADDING = { top: 25, right: 20, bottom: 45, left: 60 };
+    const plotArea = {
+        x: PADDING.left,
+        y: PADDING.top,
+        width: figWidth - PADDING.left - PADDING.right,
+        height: figHeight - PADDING.top - PADDING.bottom
+    };
+
+    // Helper to convert data points to SVG coordinates.
+    const dataToSvg = (dataPos, chId) => {
+        const chInfo = tempState.channelInfo[chId];
+        const viewTimeSpan = (view.endIndex - view.startIndex) * tempState.metadata.timePerPoint;
+        const viewVoltSpan = chInfo.vMax - chInfo.vMin;
+        if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return {x: 0, y: 0};
+        
+        const timeOffset = tempState.metadata.timeStart || 0;
+        const viewStartTime = (view.startIndex * tempState.metadata.timePerPoint);
+
+        const x = plotArea.x + ((dataPos.time - timeOffset - viewStartTime) / viewTimeSpan) * plotArea.width;
+        const y = plotArea.y + ((chInfo.vMax - dataPos.voltage) / viewVoltSpan) * plotArea.height;
+        return { x, y };
+    };
+
+    // Draw grid lines if not in IEEE mode.
+    if (styles.gridColor !== 'none') {
+        let gridLines = '';
+        for (let i = 0; i <= X_DIVS; i++) {
+            const x = plotArea.x + i / X_DIVS * plotArea.width;
+            gridLines += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" stroke="${styles.gridColor}" stroke-width="0.5" />`;
         }
+        for (let i = 0; i <= Y_DIVS; i++) {
+            const y = plotArea.y + i / Y_DIVS * plotArea.height;
+            gridLines += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" stroke="${styles.gridColor}" stroke-width="0.5" />`;
+        }
+        svg += `<g id="grid">${gridLines}</g>`;
+    }
+
+    // Draw axes, ticks, and titles.
+    svg += `<g id="axes" fill="${styles.fgColor}" stroke="${styles.fgColor}" stroke-width="1">`;
+    svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" fill="none" />`;
+
+    const visibleChannels = getVisibleChannels(tempState);
+    if(visibleChannels.length > 0) {
+        const timeSpan = (view.endIndex - view.startIndex) * tempState.metadata.timePerPoint;
+        const tStart = (view.startIndex * tempState.metadata.timePerPoint) + (tempState.metadata.timeStart || 0);
+        for (let i = 0; i <= X_DIVS; i += 2) {
+            const x = plotArea.x + i / X_DIVS * plotArea.width;
+            const timeVal = tStart + i / X_DIVS * timeSpan;
+            svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 15}" text-anchor="middle" dominant-baseline="hanging">${formatEng(timeVal, 's', 2, false)}</text>`;
+        }
+        svg += `<text x="${plotArea.x + plotArea.width / 2}" y="${figHeight - 5}" text-anchor="middle" font-weight="normal">Time (s)</text>`;
+
+        const refChId = visibleChannels[0];
+        const refChInfo = tempState.channelInfo[refChId];
+        const vRange = refChInfo.vMax - refChInfo.vMin;
+        for (let j = 0; j <= Y_DIVS; j += 2) {
+            const y = plotArea.y + j / Y_DIVS * plotArea.height;
+            const v = refChInfo.vMax - j / Y_DIVS * vRange;
+            svg += `<text x="${plotArea.x - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 2, false)}</text>`;
+        }
+        const yTitleX = 15;
+        const yTitleY = plotArea.y + plotArea.height / 2;
+        svg += `<text x="${yTitleX}" y="${yTitleY}" text-anchor="middle" transform="rotate(-90, ${yTitleX}, ${yTitleY})" font-weight="normal">Voltage (${refChInfo.units})</text>`;
+    }
+    svg += `</g>`;
+
+    // Draw waveforms inside a clipping path.
+    svg += `<g id="waveforms" clip-path="url(#clip)">`;
+    svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
+    
+    const allPoints = []; 
+    visibleChannels.forEach((ch, index) => {
+        const voltageData = tempState.waveforms[ch];
+        let pathData = '';
+        const startIndex = Math.max(0, Math.floor(view.startIndex));
+        const endIndex = Math.min(voltageData.length, Math.ceil(view.endIndex));
+        
+        for (let i = startIndex; i < endIndex; i++) {
+            const time = (i * tempState.metadata.timePerPoint);
+            const voltage = voltageData[i];
+            if (voltage === undefined) continue;
+            const p = dataToSvg({ time, voltage }, ch);
+            if (isIEEE) allPoints.push(p);
+            pathData += (pathData === '' ? 'M' : 'L') + ` ${p.x.toFixed(2)} ${p.y.toFixed(2)} `;
+        }
+        
+        const style = isIEEE 
+            ? Object.entries(styles.traceStyles[index % styles.traceStyles.length]).map(([k,v]) => `${k}="${v}"`).join(' ')
+            : `stroke="${tempState.channelInfo[ch].color}"`;
+            
+        svg += `<path d="${pathData}" fill="none" ${style} stroke-width="1.5" />`;
+    });
+    svg += `</g>`;
+
+    // Draw all annotations, cursors, etc.
+    svg += drawAnnotationsSVG(tempState, view, plotArea, dataToSvg, options);
+    
+    // Draw the legend if in IEEE mode.
+    if(isIEEE && visibleChannels.length > 0) {
+        const legendWidth = 120;
+        const legendHeight = (visibleChannels.length * 15) + 15;
+        const legendPadding = 5;
+        
+        const corners = {
+            'top-right': { x: plotArea.x + plotArea.width - legendWidth - legendPadding, y: plotArea.y + legendPadding, overlap: 0 },
+            'top-left': { x: plotArea.x + legendPadding, y: plotArea.y + legendPadding, overlap: 0 },
+            'bottom-right': { x: plotArea.x + plotArea.width - legendWidth - legendPadding, y: plotArea.y + plotArea.height - legendHeight - legendPadding, overlap: 0 },
+            'bottom-left': { x: plotArea.x + legendPadding, y: plotArea.y + plotArea.height - legendHeight - legendPadding, overlap: 0 }
+        };
+
+        for (const p of allPoints) {
+            for (const key in corners) {
+                const c = corners[key];
+                if (p.x >= c.x && p.x <= c.x + legendWidth && p.y >= c.y && p.y <= c.y + legendHeight) c.overlap++;
+            }
+        }
+
+        let bestCornerKey = Object.keys(corners).reduce((a, b) => corners[a].overlap < corners[b].overlap ? a : b);
+        const legendPos = corners[bestCornerKey];
+        
+        svg += `<g id="legend" transform="translate(${legendPos.x}, ${legendPos.y})">`;
+        svg += `<rect x="0" y="0" width="${legendWidth}" height="${legendHeight}" fill="${styles.bgColor}" stroke="${styles.fgColor}" stroke-width="0.5" />`;
+        visibleChannels.forEach((ch, index) => {
+            const chInfo = tempState.channelInfo[ch];
+            const yPos = 12 + index * 15;
+            const traceStyle = styles.traceStyles[index % styles.traceStyles.length];
+            svg += `<line x1="5" y1="${yPos}" x2="25" y2="${yPos}" stroke="${traceStyle.stroke}" stroke-width="1.5" stroke-dasharray="${traceStyle['stroke-dasharray']}" />`;
+            svg += `<text x="30" y="${yPos}" dominant-baseline="middle" fill="${styles.fgColor}">${chInfo.name}</text>`;
+        });
+        svg += `</g>`;
+    }
+
+    svg += '</svg>';
+    return svg;
+}
+
+
+/**
+ * Helper function to generate SVG elements for all annotations, cursors, etc.
+ * @returns {string} An SVG <g> element containing all annotation graphics.
+ */
+function drawAnnotationsSVG(state, view, plotArea, dataToSvgFunc, options) {
+    let svg = `<g id="annotations-group">`;
+    const isIEEE = options.isIEEE;
+    const fgColor = isIEEE ? '#000000' : '#a0a0a0';
+
+    const createText = (x, y, text, color, otherAttrs = '') => `<text x="${x}" y="${y}" fill="${color}" ${otherAttrs}>${text}</text>`;
+
+    if (options.exportAnnotations && state.annotationsVisible) {
+        (state.annotations || []).forEach(box => {
+            const boxChId = box.channel || getVisibleChannels(state)[0];
+            if (!boxChId) return;
+            const p1 = dataToSvgFunc({ time: box.t1, voltage: box.v1 }, boxChId);
+            const p2 = dataToSvgFunc({ time: box.t2, voltage: box.v2 }, boxChId);
+            const color = isIEEE ? '#555555' : state.channelInfo[boxChId].color;
+            svg += `<rect x="${Math.min(p1.x,p2.x)}" y="${Math.min(p1.y,p2.y)}" width="${Math.abs(p1.x - p2.x)}" height="${Math.abs(p1.y - p2.y)}" fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="1" />`;
+            if (box.text) svg += createText(Math.min(p1.x, p2.x), Math.min(p1.y, p2.y) - 5, box.text, color, 'font-size="9pt"');
+        });
+
+        (state.textAnnotations || []).forEach(ann => {
+             const annChId = ann.channel || getVisibleChannels(state)[0];
+             if (!annChId) return;
+             const pos = dataToSvgFunc({ time: ann.time, voltage: ann.voltage }, annChId);
+             const color = isIEEE ? fgColor : state.channelInfo[annChId].color;
+             svg += createText(pos.x, pos.y, ann.text, color);
+        });
+
+        (state.pointAnnotations || []).forEach(ann => {
+            const pos = dataToSvgFunc({ time: ann.time, voltage: ann.voltage }, ann.channel);
+            const color = isIEEE ? fgColor : state.channelInfo[ann.channel].color;
+            svg += `<circle cx="${pos.x}" cy="${pos.y}" r="3" fill="${color}" />`;
+            const textX = pos.x + ann.textPos.dx, textY = pos.y + ann.textPos.dy;
+            svg += `<line x1="${pos.x}" y1="${pos.y}" x2="${textX}" y2="${textY}" stroke="${color}" stroke-width="1" />`;
+            svg += createText(textX + 5, textY, ann.text, color, 'dominant-baseline="middle"');
+        });
+    }
+
+    if(options.exportCursors && state.cursors.enabled) {
+        const refCh = getVisibleChannels(state)[0];
+        if (refCh) {
+            const style = `stroke="${isIEEE ? '#555555' : '#f0ad4e'}" stroke-width="1.5" stroke-dasharray="6 4"`;
+            const x1 = dataToSvgFunc({time: state.cursors.x1, voltage: 0}, refCh).x;
+            const x2 = dataToSvgFunc({time: state.cursors.x2, voltage: 0}, refCh).x;
+            const y1 = dataToSvgFunc({time: 0, voltage: state.cursors.y1}, refCh).y;
+            const y2 = dataToSvgFunc({time: 0, voltage: state.cursors.y2}, refCh).y;
+            svg += `<line x1="${x1}" y1="${plotArea.y}" x2="${x1}" y2="${plotArea.y + plotArea.height}" ${style} />`;
+            svg += `<line x1="${x2}" y1="${plotArea.y}" x2="${x2}" y2="${plotArea.y + plotArea.height}" ${style} />`;
+            svg += `<line x1="${plotArea.x}" y1="${y1}" x2="${plotArea.x + plotArea.width}" y2="${y1}" ${style} />`;
+            svg += `<line x1="${plotArea.x}" y1="${y2}" x2="${plotArea.x + plotArea.width}" y2="${y2}" ${style} />`;
+        }
+    }
+    
+    svg += `</g>`;
+    return svg;
+}
 
         // SEPARATE EXPORT FUNCTION for IEEE
         function generateExportIEEE(options) {
