@@ -183,7 +183,7 @@
     <div class="status-bar">
         <div class="window-title">Advanced WFM Viewer</div>
         <div id="statusText" style="flex: 1;">Ready to load file</div>
-        <div>Viewer v22.9</div>
+        <div>Viewer v23.1</div>
     </div>
 
     <div class="modal-overlay" id="aboutModal">
@@ -283,17 +283,17 @@
                 </div>
 
             <div class="modal-footer">
-                <button class="modal-button modal-cancel-btn" id="csvOptionsCancel">Cancel</button>
+                <button class="modal-button modal-cancel-btn">Cancel</button>
                 <button class="modal-button modal-confirm-btn" id="csvOptionsConfirm">Load CSV</button>
             </div>
         </div>
     </div>
 
-    <div class="modal-overlay" id="pasteModal">
+    <div class="modal-overlay" id="pastedDataOptionsModal">
         <div class="modal-content">
           <span class="modal-close">&times;</span>
-          <h2>Single Column Paste Options</h2>
-          <p style="margin: 15px 0;">Please define the X-axis for the pasted data.</p>
+          <h2>Pasted Data Options</h2>
+          <p style="margin: 15px 0;">Single row/column of data detected. Please define the X-axis.</p>
           <div class="control-item">
             <label for="pasteTimeStart" class="control-label">Time Start:</label>
             <input type="text" id="pasteTimeStart" value="0" class="control-input">
@@ -303,11 +303,26 @@
             <input type="text" id="pasteTimeStep" value="1" class="control-input">
           </div>
           <div class="modal-footer">
-            <button class="modal-button modal-cancel-btn" id="pasteCancelBtn">Cancel</button>
+            <button class="modal-button modal-cancel-btn">Cancel</button>
             <button class="modal-button modal-confirm-btn" id="pasteConfirmBtn">Load Data</button>
           </div>
         </div>
-      </div>
+    </div>
+
+    <div class="modal-overlay" id="pasteDestinationModal">
+        <div class="modal-content">
+          <span class="modal-close">&times;</span>
+          <h2>Paste Data</h2>
+          <p style="margin: 15px 0;">Where would you like to add the pasted waveform data?</p>
+          <div class="modal-footer" style="justify-content: space-between;">
+            <button class="modal-button modal-cancel-btn">Cancel</button>
+            <div>
+                <button class="modal-button modal-confirm-btn" id="pasteToCurrentBtn">Add to Current Tab</button>
+                <button class="modal-button modal-confirm-btn" id="pasteToNewBtn">Create New Tab</button>
+            </div>
+          </div>
+        </div>
+    </div>
 
     <div id="drag-overlay">
         <div class="drag-overlay-content">
@@ -487,18 +502,15 @@
         constructor(dataArray, options) {
             this.data = new Float32Array(dataArray);
             this.timePerPoint = options.step;
-            // The first time value is derived from the startIndex of the view, not stored here.
+            this.timeStart = options.start;
         }
         isValid() { return true; }
         getTimeScale() { return this.timePerPoint; }
         getNumDataPoints() { return this.data.length; }
         getVoltageUnits() { return 'V'; }
+        getChannelNames() { return ['Pasted Data']; } // For multi-channel support in merger
         getChannelData(chName) { return this.data; }
-        // Dummy methods to satisfy createDefaultTabState
-        isChannelWritten(c) { return c===1; }
-        getChannelNames() { return ['Pasted Data']; }
     }
-
 
     document.addEventListener('DOMContentLoaded', function() {
         const canvas = document.getElementById('waveformCanvas');
@@ -507,7 +519,7 @@
         const dragOverlay = document.getElementById('drag-overlay');
         const statusText = document.getElementById('statusText');
         const csvOptionsModal = document.getElementById('csvOptionsModal');
-        const pasteModal = document.getElementById('pasteModal');
+        const pastedDataOptionsModal = document.getElementById('pastedDataOptionsModal');
         let tempCsvData = { text: '', fileName: '' };
         let tempPastedData = null;
 
@@ -535,13 +547,13 @@
         const SEPARATE_VIEW_GAP = 20;
         const OVERLAP_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94'];
 
-        function createDefaultTabState(fileName, parser, overrides = {}, timeMultiplier = 1) {
-            const timePerPoint = parser.getTimeScale() * timeMultiplier;
+        function createDefaultTabState(fileName, parser, overrides = {}) {
+            const timePerPoint = parser.getTimeScale();
             const numPoints = parser.getNumDataPoints();
             
             const newState = {
                 fileName: fileName,
-                parser: parser, // Store parser for file details, but don't rely on it for saving state
+                parser: parser,
                 waveforms: {},
                 metadata: { timePerPoint: timePerPoint, totalTime: numPoints * timePerPoint, numPoints: numPoints },
                 channelInfo: {},
@@ -569,11 +581,7 @@
                     name: chName, visible: true, color: OVERLAP_COLORS[0], units: parser.getVoltageUnits(),
                     vMin: min - margin, vMax: max + margin
                 };
-                // For pasted data, the time starts from the specified value.
-                const timeStart = overrides.start || 0;
-                newState.metadata.timeStart = timeStart;
-                newState.view.startIndex = timeStart / timePerPoint;
-                newState.view.endIndex = (timeStart / timePerPoint) + numPoints;
+                newState.metadata.timeStart = overrides.start || 0;
             } else if (parser instanceof CsvParser) {
                 let colorIdx = 0;
                 parser.channelNames.forEach(chName => {
@@ -671,10 +679,9 @@
                  const chInfo = state.channelInfo[targetChannelId];
                  voltage = chInfo.vMax - (screenPos.y - p.y) * (chInfo.vMax - chInfo.vMin) / p.height;
             }
-            
             const timeOffset = state.metadata.timeStart || 0;
-            const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint) + timeOffset;
-            return { time, voltage };
+            const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint);
+            return { time: time + timeOffset, voltage };
         }
         function dataToScreen(dataPos, view, state, channelId, plotArea) {
             const { width, height } = canvas.getBoundingClientRect();
@@ -687,10 +694,10 @@
             if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return {x: p.x, y: p.y + p.height / 2};
             
             const timeOffset = state.metadata.timeStart || 0;
-            const viewStartTime = (view.startIndex * state.metadata.timePerPoint) + timeOffset;
+            const viewStartTime = (view.startIndex * state.metadata.timePerPoint);
 
             return {
-                x: p.x + ((dataPos.time - viewStartTime) / viewTimeSpan) * p.width,
+                x: p.x + ((dataPos.time - timeOffset - viewStartTime) / viewTimeSpan) * p.width,
                 y: p.y + ((chInfo.vMax - dataPos.voltage) / viewVoltSpan) * p.height
             };
         }
@@ -912,7 +919,7 @@
                     }
                 }
             }
-            const isLastSeparateViewForTitle = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
+            const isLastSeparateViewForTitle = separateChannelId && getVisibleChannels(state)?.slice(-1)[0] === separateChannelId;
             if (!displayOptions.separateView || state?.isOverlap || isLastSeparateViewForTitle) {
                  context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
             }
@@ -961,8 +968,8 @@
             const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
             const dataNumPoints = chInfo.originalMetadata ? chInfo.originalMetadata.numPoints : state.metadata.numPoints;
             const timeOffset = state.metadata.timeStart || 0;
-            const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint) + timeOffset;
-            const viewEndTime = (state.view.endIndex * state.metadata.timePerPoint) + timeOffset;
+            const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint);
+            const viewEndTime = (state.view.endIndex * state.metadata.timePerPoint);
             const viewTimeSpan = viewEndTime - viewStartTime;
             if (viewTimeSpan <= 0) return;
 
@@ -977,8 +984,8 @@
             context.lineWidth = 1.5;
             context.beginPath();
             
-            const startIndex = Math.max(0, Math.floor((viewStartTime - timeOffset) / dataTimePerPoint));
-            const endIndex = Math.min(dataNumPoints, Math.ceil((viewEndTime - timeOffset) / dataTimePerPoint));
+            const startIndex = Math.max(0, Math.floor(viewStartTime / dataTimePerPoint));
+            const endIndex = Math.min(dataNumPoints, Math.ceil(viewEndTime / dataTimePerPoint));
             const pointsInView = endIndex - startIndex;
             if (pointsInView <= 1) return;
 
@@ -987,8 +994,8 @@
                  for (let i = 0; i < p.width; i++) {
                     const tStart = viewStartTime + i * timeStepPerPixel;
                     const tEnd = tStart + timeStepPerPixel;
-                    const idxStart = Math.max(startIndex, Math.floor((tStart - timeOffset) / dataTimePerPoint));
-                    const idxEnd = Math.min(endIndex, Math.ceil((tEnd - timeOffset) / dataTimePerPoint));
+                    const idxStart = Math.max(startIndex, Math.floor(tStart / dataTimePerPoint));
+                    const idxEnd = Math.min(endIndex, Math.ceil(tEnd / dataTimePerPoint));
                     if (idxStart >= idxEnd) continue;
                     let min = Infinity, max = -Infinity;
                     for (let j = idxStart; j < idxEnd; j++) {
@@ -1009,7 +1016,7 @@
                 for (let i = startIndex; i < endIndex; i++) {
                     const dataTime = (i * dataTimePerPoint) + timeOffset;
                     const voltage = voltageData[i];
-                    const x_px = p.x + ((dataTime - viewStartTime) / viewTimeSpan) * p.width;
+                    const x_px = p.x + ((dataTime - timeOffset - viewStartTime) / viewTimeSpan) * p.width;
                     const y_px = p.y + ((chInfo.vMax - voltage) / vRange) * p.height;
                     if (i === startIndex) context.moveTo(x_px, y_px);
                     else context.lineTo(x_px, y_px);
@@ -1409,7 +1416,7 @@
                      }
                  }
                  
-                 const newState = createDefaultTabState(fileName, parser, loadOptions.overrides, loadOptions.timeMultiplier);
+                 const newState = createDefaultTabState(fileName, parser, loadOptions.overrides);
                  const newIndex = tabStates.length;
                  tabStates.push(newState);
                  addTabToUI(fileName, newIndex);
@@ -1505,8 +1512,7 @@
             document.getElementById('cursorBtn').classList.toggle('active', state.cursors.enabled);
             document.getElementById('cursorPanel').style.display = state.cursors.enabled ? 'block' : 'none';
             if(state.cursors.enabled) updateCursorReadouts(state);
-            document.getElementById('annotateBtn').classList.toggle('active', state.annotationMode || textAnnotationMode);
-            document.getElementById('clearAnnotationsBtn').style.display = (state.annotationMode || textAnnotationMode) ? 'flex' : 'none';
+            updateAnnotationButtonState();
             document.getElementById('measurement-controls').style.display = document.getElementById('showStatsCheckbox').checked && !state.isOverlap ? 'block' : 'none';
             updateControlsFromView(state);
 
@@ -1657,11 +1663,11 @@
 
                 const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
                 const timeOffset = state.metadata.timeStart || 0;
-                const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint) + timeOffset;
+                const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint);
                 const viewTimeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
                 
                 const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
-                const timeAtMouse = viewStartTime + ((mouseX - plotArea.x) / plotArea.width) * viewTimeSpan;
+                const timeAtMouse = viewStartTime + ((mouseX - plotArea.x) / plotArea.width) * viewTimeSpan + timeOffset;
                 const dataIndex = Math.round((timeAtMouse - timeOffset) / dataTimePerPoint);
 
                 if (dataIndex >= 0 && dataIndex < state.waveforms[ch].length) {
@@ -1882,8 +1888,8 @@
                 if (Math.abs(dragEnd.x - dragStart.x) >= 10 && Math.abs(dragEnd.y - dragStart.y) >= 10) {
                     const { time: t1 } = screenToData({x: Math.min(dragStart.x, dragEnd.x), y: 0}, state.view, state);
                     const { time: t2 } = screenToData({x: Math.max(dragStart.x, dragEnd.x), y: 0}, state.view, state);
-                    const newStartIndex = Math.max(0, t1 / state.metadata.timePerPoint);
-                    const newEndIndex = Math.min(state.metadata.numPoints, t2 / state.metadata.timePerPoint);
+                    const newStartIndex = Math.max(0, (t1 - (state.metadata.timeStart || 0)) / state.metadata.timePerPoint);
+                    const newEndIndex = Math.min(state.metadata.numPoints, (t2 - (state.metadata.timeStart || 0)) / state.metadata.timePerPoint);
                     
                     if (newEndIndex - newStartIndex >= 10) {
                         state.view.startIndex = newStartIndex;
@@ -1903,9 +1909,38 @@
                 if (state.annotationMode && Math.abs(dragEnd.x - dragStart.x) > 5) {
                     const annotationCh = state.annotationChannel || getVisibleChannels(state)[0];
                     if (annotationCh) {
-                        const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, annotationCh);
-                        const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, annotationCh);
-                        state.annotations.push({ t1: t_start, v1: v_start, t2: t_end, v2: v_end, channel: annotationCh, text: "Measurement" });
+                        let plotArea = null;
+                        const { width, height } = canvas.getBoundingClientRect();
+                        const visibleChannels = getVisibleChannels(state);
+
+                        if (displayOptions.separateView && visibleChannels.length > 0 && !state.isOverlap) {
+                            const PADDING = getDynamicPadding(state);
+                            const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                            const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
+                            const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
+                            if (individualPlotHeight > 0) {
+                                const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
+                                const relativeY = dragStart.y - PADDING.top;
+                                const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
+                                
+                                if (blockIndex < visibleChannels.length) {
+                                    plotArea = {
+                                        x: PADDING.left,
+                                        y: PADDING.top + blockIndex * blockHeight,
+                                        width: width - PADDING.left - PADDING.right,
+                                        height: individualPlotHeight
+                                    };
+                                }
+                            }
+                        } else {
+                            plotArea = getPlotArea(width, height, state);
+                        }
+
+                        if (plotArea) {
+                            const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, annotationCh, plotArea);
+                            const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, annotationCh, plotArea);
+                            state.annotations.push({ t1: t_start, v1: v_start, t2: t_end, v2: v_end, channel: annotationCh, text: "Measurement" });
+                        }
                     }
                 }
             }
@@ -2082,9 +2117,51 @@
         });
 
         document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT = (s.view.endIndex - s.view.startIndex) * s.metadata.timePerPoint; const startTime = s.view.startIndex * s.metadata.timePerPoint; const firstCh = getVisibleChannels(s)[0]; if(firstCh){const chInfo=s.channelInfo[firstCh]; const spanV=chInfo.vMax-chInfo.vMin; s.cursors.y1=chInfo.vMin+spanV*0.25; s.cursors.y2=chInfo.vMin+spanV*0.75;} s.cursors.x1=startTime+spanT*0.25; s.cursors.x2=startTime+spanT*0.75; trackCursors();} draw(); });
-        document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; pointAnnotationMode = false; canvas.style.cursor = 'crosshair'; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
         document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; s.pointAnnotations = []; activeInteraction = {type: null}; draw(); });
         
+        // --- ANNOTATION BUTTONS & KEYDOWN ---
+        function updateAnnotationButtonState() {
+            const state = getActiveState();
+            const anyModeActive = state ? (state.annotationMode || textAnnotationMode || pointAnnotationMode) : false;
+            document.getElementById('annotateBtn').classList.toggle('active', anyModeActive);
+            document.getElementById('clearAnnotationsBtn').style.display = anyModeActive ? 'flex' : 'none';
+        }
+
+        document.getElementById('annotateBtn').addEventListener('click', (e) => {
+            const s = getActiveState(); if(!s) return;
+            s.annotationMode = !s.annotationMode;
+            if (s.annotationMode) {
+                textAnnotationMode = false;
+                pointAnnotationMode = false;
+                canvas.style.cursor = 'crosshair';
+            } else {
+                 canvas.style.cursor = 'grab';
+            }
+            updateAnnotationButtonState();
+        });
+
+        function toggleTextAnnotationMode() {
+            const s = getActiveState(); if(!s) return;
+            textAnnotationMode = !textAnnotationMode;
+            if (textAnnotationMode) {
+                s.annotationMode = false;
+                pointAnnotationMode = false;
+            }
+            canvas.style.cursor = textAnnotationMode ? 'text' : 'grab';
+            updateAnnotationButtonState();
+        }
+
+        function togglePointAnnotationMode() {
+            const s = getActiveState(); if(!s) return;
+            pointAnnotationMode = !pointAnnotationMode;
+            if (pointAnnotationMode) {
+                s.annotationMode = false;
+                textAnnotationMode = false;
+            }
+            canvas.style.cursor = pointAnnotationMode ? 'crosshair' : 'grab';
+            updateAnnotationButtonState();
+        }
+
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT') return;
             const state = getActiveState();
@@ -2135,8 +2212,7 @@
         function trackCursors() { const s = getActiveState(); if (!s || !s.cursors.trackingChannel || !s.waveforms[s.cursors.trackingChannel]) return; const data = s.waveforms[s.cursors.trackingChannel]; const i1 = Math.round(s.cursors.x1 / s.metadata.timePerPoint); if(data[i1] !== undefined) s.cursors.y1 = data[i1]; const i2 = Math.round(s.cursors.x2 / s.metadata.timePerPoint); if(data[i2] !== undefined) s.cursors.y2 = data[i2]; }
         function findViewExtrema(channels) { const s = getActiveState(); if (!s) return null; let viewMin = { val: Infinity, time: -1, ch: null }, viewMax = { val: -Infinity, time: -1, ch: null }; const start = Math.floor(s.view.startIndex), end = Math.ceil(s.view.endIndex); channels.forEach(ch => { const data = s.waveforms[ch]; for (let i = start; i < end; i++) { const val = data[i]; if (val < viewMin.val) { viewMin = { val, time: i * s.metadata.timePerPoint, ch }; } if (val > viewMax.val) { viewMax = { val, time: i * s.metadata.timePerPoint, ch }; } } }); return { min: viewMin, max: viewMax }; }
         function setCursorsToExtrema(type) { const s = getActiveState(); if (!s) return; const visibleChannels = getVisibleChannels(s); if (visibleChannels.length === 0) return; const extrema = findViewExtrema(visibleChannels); if(type === 'max' && extrema.max.time !== -1) { s.cursors.x1 = extrema.max.time; s.cursors.y1 = extrema.max.val; } else if (type === 'min' && extrema.min.time !== -1) { s.cursors.x2 = extrema.min.time; s.cursors.y2 = extrema.min.val; } updateCursorReadouts(s); draw(); }
-        function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode) { s.annotationMode = false; pointAnnotationMode = false; } canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
-        function togglePointAnnotationMode() { const s = getActiveState(); if(!s) return; pointAnnotationMode = !pointAnnotationMode; if(pointAnnotationMode) { s.annotationMode = false; textAnnotationMode = false; } canvas.style.cursor = pointAnnotationMode ? 'crosshair' : 'grab'; document.getElementById('annotateBtn').classList.remove('active'); document.getElementById('clearAnnotationsBtn').style.display = 'none'; }
+        
         function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value, channel: s.annotationChannel }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
         function createPointAnnotation(e) {
             const state = getActiveState();
@@ -2288,7 +2364,7 @@
                  aboutModal.style.display='flex'; 
              });
              document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
-             [aboutModal, exportModal, csvOptionsModal, pasteModal].forEach(m => { 
+             [aboutModal, exportModal, csvOptionsModal, pastedDataOptionsModal, document.getElementById('pasteDestinationModal')].forEach(m => { 
                  if (m) {
                      const closeBtn = m.querySelector('.modal-close');
                      const cancelBtn = m.querySelector('.modal-cancel-btn');
@@ -2642,6 +2718,118 @@
         document.getElementById('csvDelimiter').addEventListener('input', updateCsvColumnMapping);
         document.getElementById('csvHasHeader').addEventListener('change', updateCsvColumnMapping);
 
+        // --- Paste Logic ---
+        let tempPastedText = '';
+        let pasteDestination = 'new'; // 'new' or 'current'
+
+        document.body.addEventListener('paste', handlePaste);
+
+        function handlePaste(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            if (!text || text.trim().length === 0) return;
+
+            tempPastedText = text;
+
+            const pasteDestinationModal = document.getElementById('pasteDestinationModal');
+            const pasteToCurrentBtn = document.getElementById('pasteToCurrentBtn');
+
+            if (getActiveState()) {
+                pasteToCurrentBtn.disabled = false;
+                pasteToCurrentBtn.style.opacity = 1;
+                pasteToCurrentBtn.style.cursor = 'pointer';
+
+            } else {
+                pasteToCurrentBtn.disabled = true;
+                pasteToCurrentBtn.style.opacity = 0.5;
+                pasteToCurrentBtn.style.cursor = 'not-allowed';
+            }
+            pasteDestinationModal.style.display = 'flex';
+        }
+        
+        function processPastedText() {
+            const lines = tempPastedText.trim().split('\n');
+            if (lines.length === 0) return;
+            const numRows = lines.length;
+
+            let delimiter = ',';
+            if (lines[0].includes('\t')) {
+                delimiter = '\t';
+            }
+            const numCols = lines[0].split(delimiter).length;
+
+            if (numRows > 1 && numCols > 1) {
+                showCsvOptionsModal(tempPastedText, "Pasted Data");
+            } else {
+                // Handle both single row (numRows=1) and single column (numCols=1)
+                const values = tempPastedText.trim().split(/[\s,	]+/); // Split by any whitespace, comma, or tab
+                const data = values.map(v => parseFloat(v)).filter(n => !isNaN(n));
+
+                if (data.length > 1) {
+                    tempPastedData = data;
+                    document.getElementById('pasteTimeStart').value = '0';
+                    document.getElementById('pasteTimeStep').value = '1';
+                    pastedDataOptionsModal.style.display = 'flex';
+                } else {
+                    alert("Could not find valid numeric data to paste.");
+                }
+            }
+        }
+
+        function mergeDataIntoCurrentTab(parser) {
+            const state = getActiveState();
+            if (!state) return;
+
+            const channelNames = parser.channelNames || parser.getChannelNames();
+            let colorIndex = state.drawOrder.length;
+
+            channelNames.forEach(chName => {
+                const data = parser.getChannelData(chName);
+                if (data) {
+                    let min = Infinity, max = -Infinity;
+                    for(const v of data) {
+                        if (v < min) min = v;
+                        if (v > max) max = v;
+                    }
+                    const margin = (max - min) * 0.1 || 1;
+
+                    let newChId = chName;
+                    let counter = 1;
+                    while (state.waveforms[newChId]) {
+                        newChId = `${chName}_${counter++}`;
+                    }
+
+                    state.waveforms[newChId] = data;
+                    state.drawOrder.push(newChId);
+                    state.channelInfo[newChId] = {
+                        name: newChId,
+                        visible: true,
+                        color: OVERLAP_COLORS[colorIndex % OVERLAP_COLORS.length],
+                        units: parser.getVoltageUnits(newChId),
+                        vMin: min - margin,
+                        vMax: max + margin,
+                    };
+                    colorIndex++;
+                }
+            });
+
+            updateUIFromState();
+            fitYToAllVisible();
+        }
+
+        const pasteDestinationModal = document.getElementById('pasteDestinationModal');
+        document.getElementById('pasteToCurrentBtn').addEventListener('click', () => {
+            pasteDestination = 'current';
+            pasteDestinationModal.style.display = 'none';
+            processPastedText();
+        });
+        document.getElementById('pasteToNewBtn').addEventListener('click', () => {
+            pasteDestination = 'new';
+            pasteDestinationModal.style.display = 'none';
+            processPastedText();
+        });
+
         document.getElementById('csvOptionsConfirm').addEventListener('click', () => {
             const options = {
                 delimiter: document.getElementById('csvDelimiter').value || ',',
@@ -2683,45 +2871,23 @@
                 if (!parser.isValid()) {
                     throw new Error(parser.error || "Failed to parse CSV file with selected options.");
                 }
-                const newState = createDefaultTabState(tempCsvData.fileName, parser);
-                const newIndex = tabStates.length;
-                tabStates.push(newState);
-                addTabToUI(tempCsvData.fileName, newIndex);
-                switchToTab(newIndex);
-                statusText.textContent = `Loaded: ${tempCsvData.fileName}`;
+
+                if (pasteDestination === 'current' && getActiveState()) {
+                    mergeDataIntoCurrentTab(parser);
+                    statusText.textContent = `Pasted data added to ${getActiveState().fileName}`;
+                } else {
+                    const newState = createDefaultTabState(tempCsvData.fileName, parser);
+                    const newIndex = tabStates.length;
+                    tabStates.push(newState);
+                    addTabToUI(tempCsvData.fileName, newIndex);
+                    switchToTab(newIndex);
+                    statusText.textContent = `Loaded: ${tempCsvData.fileName}`;
+                }
             } catch (err) {
                 statusText.textContent = `Error processing ${tempCsvData.fileName}: ${err.message}`;
                 console.error(err);
             }
         });
-        
-        // --- Paste Logic ---
-        document.body.addEventListener('paste', handlePaste);
-
-        function handlePaste(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            if (!text) return;
-
-            const lines = text.trim().split('\n');
-            if (lines.length === 0) return;
-            
-            const delimiter = lines[0].includes('\t') ? '\t' : ',';
-            const numCols = lines[0].split(delimiter).length;
-            
-            if (numCols > 1) {
-                showCsvOptionsModal(text, "Pasted Data");
-            } else {
-                const data = lines.map(l => parseFloat(l)).filter(n => !isNaN(n));
-                if (data.length > 1) {
-                    tempPastedData = data;
-                    document.getElementById('pasteTimeStart').value = '0';
-                    document.getElementById('pasteTimeStep').value = '1';
-                    pasteModal.style.display = 'flex';
-                }
-            }
-        }
 
         document.getElementById('pasteConfirmBtn').addEventListener('click', () => {
             const start = parseEng(document.getElementById('pasteTimeStart').value);
@@ -2731,15 +2897,20 @@
                 return;
             }
             const parser = new PastedDataParser(tempPastedData, { start, step });
-            const newState = createDefaultTabState('Pasted Data', parser, { start, step });
-            const newIndex = tabStates.length;
-            tabStates.push(newState);
-            addTabToUI(newState.fileName, newIndex);
-            switchToTab(newIndex);
-            statusText.textContent = `Loaded: Pasted Data`;
-            pasteModal.style.display = 'none';
-        });
 
+            if (pasteDestination === 'current' && getActiveState()) {
+                 mergeDataIntoCurrentTab(parser);
+                 statusText.textContent = `Pasted data added to ${getActiveState().fileName}`;
+            } else {
+                const newState = createDefaultTabState('Pasted Data', parser, { start });
+                const newIndex = tabStates.length;
+                tabStates.push(newState);
+                addTabToUI(newState.fileName, newIndex);
+                switchToTab(newIndex);
+                statusText.textContent = `Loaded: Pasted Data`;
+            }
+            pastedDataOptionsModal.style.display = 'none';
+        });
 
         setupModals();
         new ResizeObserver(resizeCanvas).observe(document.getElementById('waveformContainer'));
