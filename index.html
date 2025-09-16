@@ -22,6 +22,8 @@
         .tab-close { margin-left: auto; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; }
         .tab-close:hover { background-color: rgba(255,255,255,0.2); }
         .tab-item.active .tab-close:hover { background-color: rgba(0,0,0,0.2); }
+        #createOverlapBtn { margin-left: auto; background: none; border: none; color: #ccc; padding: 0 15px; cursor: pointer; font-size: 16px; transition: all 0.2s; }
+        #createOverlapBtn:hover { color: white; background: #4a4a4a; }
 
         .toolbar { height: 48px; background: #3c3c3c; display: flex; align-items: center; padding: 0 16px; gap: 16px; border-bottom: 1px solid #4a4a4a; flex-shrink: 0; }
         .tool-button { padding: 8px 16px; background: #5e5e5e; border: none; border-radius: 4px; color: white; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 15px; transition: background 0.2s; }
@@ -41,11 +43,8 @@
         .control-input { width: 110px; padding: 4px 8px; background: #454545; border: 1px solid #5a5a5a; border-radius: 4px; color: white; font-size: 13px; font-family: Consolas, monospace;}
         .checkbox-item { margin-top: 15px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
         .channel-button { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: #454545; border: none; border-radius: 4px; color: white; cursor: pointer; margin-bottom: 8px; width: 100%; transition: background 0.2s; font-size: 15px; }
-        .channel-button.active.ch1 { background: #00bcf2; }
-        .channel-button.active.ch2 { background: #ff4343; }
-        .channel-button.active.ch3 { background: #8aff8a; }
-        .channel-button.active.ch4 { background: #ff8aff; }
-        .channel-button .ch-name { display: flex; align-items: center; gap: 8px; }
+        .channel-button.active { /* Color is now set dynamically via JS */ }
+        .channel-button .ch-name { flex-grow: 1; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
         .channel-button .ch-order { font-size: 12px; color: #ccc; }
         .file-input { display: none; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; display: none; align-items: center; justify-content: center; }
@@ -164,7 +163,9 @@
             </div>
         </div>
         <div class="content-area">
-            <div class="tab-container" id="tabContainer"></div>
+            <div class="tab-container" id="tabContainer">
+                 <button id="createOverlapBtn" title="Create Overlap Tab from Visible Channels"><i class="fas fa-layer-group"></i></button>
+            </div>
             <div class="toolbar">
                 <button class="tool-button" id="resetViewBtn"><i class="fas fa-expand"></i> Reset Offsets & View</button>
                 <button class="tool-button" id="cursorBtn"><i class="fas fa-ruler-combined"></i> Cursors</button>
@@ -194,7 +195,7 @@
                 <li><span>Full Reset View</span><code>Double Click</code></li>
                 <li><span>Toggle Area Zoom Mode (1-time use)</span><code>Z Key</code></li>
                 <li><span>Hide/Show Annotations</span><code>Ctrl + H</code></li>
-                <li><span>Select Annotation Scale</span><code>1, 2, 3, 4 Keys</code></li>
+                <li><span>Select Annotation Scale (Nth Channel)</span><code>1 - 9 Keys</code></li>
                 <li><span>Pan Chart (X & Y)</span><code>Mouse Drag (empty area)</code></li>
                 <li><span>Move Channel (Y-Axis)</span><code>Mouse Drag (on trace)</code></li>
                 <li><span>Zoom (X-Axis)</span><code>Scroll over Chart</code></li>
@@ -374,6 +375,8 @@
         let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false, separateView: false };
         let textAnnotationMode = false;
         let lastMousePos = { x: 0, y: 0 };
+        let hoveredChannelInfo = null;
+        let lastHoveredChannelId = null;
 
         const X_DIVS = 10;
         const Y_DIVS = 10;
@@ -382,7 +385,8 @@
         const Y_AXIS_WIDTH = 70;
         const Y_AXIS_WIDTH_SEPARATE = 55;
         const SEPARATE_VIEW_GAP = 20;
-        const CHANNEL_COLORS = ['#00bcf2', '#ff4343', '#8aff8a', '#ff8aff'];
+        const OVERLAP_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94'];
+
         let lastRigolMultiplier = {};
 
         function createDefaultTabState(fileName, parser, overrides = {}, timeMultiplier = 1) {
@@ -400,7 +404,8 @@
                 cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
                 annotations: [], textAnnotations: [], annotationMode: false,
                 annotationsVisible: true,
-                annotationChannel: null
+                annotationChannel: null,
+                isOverlap: false,
             };
 
             if (parser instanceof TekWfmParser) {
@@ -413,10 +418,11 @@
                 newState.waveforms['channel1'] = data;
                 newState.drawOrder.push('channel1');
                 newState.channelInfo['channel1'] = {
-                    name: 'Channel 1', visible: true, color: CHANNEL_COLORS[0], units: parser.getVoltageUnits(),
+                    name: 'Channel 1', visible: true, color: OVERLAP_COLORS[0], units: parser.getVoltageUnits(),
                     vMin: vCenter - vSpan / 2, vMax: vCenter + vSpan / 2
                 };
             } else if (parser instanceof RigolWfmParser) {
+                let colorIdx = 0;
                 for (let i = 1; i <= 4; i++) {
                     if (parser.isChannelWritten(i)) {
                         const chKey = `channel${i}`;
@@ -431,9 +437,10 @@
                             newState.waveforms[chKey] = data;
                             newState.drawOrder.push(chKey);
                             newState.channelInfo[chKey] = {
-                                name: `Channel ${i}`, visible: true, color: CHANNEL_COLORS[i - 1], units: 'V',
+                                name: `Channel ${i}`, visible: true, color: OVERLAP_COLORS[colorIdx % OVERLAP_COLORS.length], units: 'V',
                                 vMin: voltageOffset - vSpan / 2, vMax: voltageOffset + vSpan / 2
                             };
+                            colorIdx++;
                         }
                     }
                 }
@@ -455,7 +462,7 @@
             const visibleChannels = getVisibleChannels(state);
             if (visibleChannels.length === 0) return { ...PADDING_STATIC, left: Y_AXIS_WIDTH + 10 };
             
-            if (displayOptions.separateView) {
+            if (displayOptions.separateView && !state.isOverlap) {
                 return { ...PADDING_STATIC, left: Y_AXIS_WIDTH_SEPARATE + 10 };
             } else {
                 const left = Y_AXIS_WIDTH * visibleChannels.length + 10;
@@ -501,7 +508,7 @@
 
         function resizeCanvas() { const dpr = window.devicePixelRatio || 1; const rect = document.getElementById('waveformContainer').getBoundingClientRect(); canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.scale(dpr, dpr); draw(); }
 
-function draw() {
+        function draw() {
             requestAnimationFrame(() => {
                 const state = getActiveState();
                 const { width, height } = canvas.getBoundingClientRect();
@@ -519,7 +526,7 @@ function draw() {
                 
                 const visibleChannels = getVisibleChannels(state);
 
-                if (displayOptions.separateView && visibleChannels.length > 0) {
+                if (displayOptions.separateView && !state.isOverlap && visibleChannels.length > 0) {
                     const PADDING = getDynamicPadding(state);
                     const totalPlotHeight = height - PADDING.top - PADDING.bottom;
                     const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
@@ -558,7 +565,13 @@ function draw() {
                     ctx.save();
                     ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
                     ctx.clip();
-                    state.drawOrder.forEach(ch => { if (state.channelInfo[ch].visible && state.waveforms[ch]) drawWaveform(state, ch, plotArea); });
+                    
+                    state.drawOrder.forEach(ch => { 
+                        if (state.channelInfo[ch].visible && state.waveforms[ch]) {
+                            drawWaveform(state, ch, plotArea);
+                        }
+                    });
+                    
                     if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
                     drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
                     drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
@@ -642,7 +655,34 @@ function draw() {
                         }
                     }
                 }
+                 if (hoveredChannelInfo) {
+                    drawHoverTooltip();
+                }
             });
+        }
+        
+        function drawHoverTooltip() {
+            if (!hoveredChannelInfo) return;
+            const { name, color, x, y } = hoveredChannelInfo;
+            const padding = 8;
+            ctx.font = '13px Segoe UI';
+            const textWidth = ctx.measureText(name).width;
+            const boxWidth = textWidth + 2 * padding;
+            const boxHeight = 28;
+            let boxX = x + 15;
+            let boxY = y + 15;
+            const canvasRect = canvas.getBoundingClientRect();
+            if (boxX + boxWidth > canvasRect.width) { boxX = x - boxWidth - 15; }
+            if (boxY + boxHeight > canvasRect.height) { boxY = y - boxHeight - 15; }
+            ctx.fillStyle = 'rgba(40, 40, 40, 0.85)';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+            ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(name, boxX + padding, boxY + boxHeight / 2);
         }
         
                 function formatEng(v, u, p = 3, includeUnit = true){ 
@@ -685,7 +725,7 @@ function draw() {
                 visibleChannels.forEach((chId, i) => {
                     const chInfo = state.channelInfo[chId];
                     const vRange = chInfo.vMax - chInfo.vMin;
-                    const axisWidth = displayOptions.separateView ? Y_AXIS_WIDTH_SEPARATE : Y_AXIS_WIDTH;
+                    const axisWidth = (displayOptions.separateView && !state.isOverlap) ? Y_AXIS_WIDTH_SEPARATE : Y_AXIS_WIDTH;
                     const axisX = p.x - (i * axisWidth) - 10;
                     ctx.fillStyle = chInfo.color;
                     ctx.textAlign = 'right';
@@ -714,48 +754,57 @@ function draw() {
         }
 
         function drawWaveform(state, ch, p) {
-            const { waveforms, view } = state;
-            const voltageData = waveforms[ch];
+            const voltageData = state.waveforms[ch];
             const chInfo = state.channelInfo[ch];
-            
+            const vRange = chInfo.vMax - chInfo.vMin;
+            if (vRange <= 0) return;
+
+            const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
+            const dataNumPoints = chInfo.originalMetadata ? chInfo.originalMetadata.numPoints : state.metadata.numPoints;
+            const viewStartTime = state.view.startIndex * state.metadata.timePerPoint;
+            const viewEndTime = state.view.endIndex * state.metadata.timePerPoint;
+            const viewTimeSpan = viewEndTime - viewStartTime;
+            if (viewTimeSpan <= 0) return;
+
             ctx.strokeStyle = chInfo.color;
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             
-            const vRange = chInfo.vMax - chInfo.vMin;
-            if (vRange <= 0) return;
-
-            const startIndex = Math.max(0, Math.floor(view.startIndex));
-            const endIndex = Math.min(state.metadata.numPoints, Math.ceil(view.endIndex));
+            const startIndex = Math.max(0, Math.floor(viewStartTime / dataTimePerPoint));
+            const endIndex = Math.min(dataNumPoints, Math.ceil(viewEndTime / dataTimePerPoint));
             const pointsInView = endIndex - startIndex;
-            
             if (pointsInView <= 1) return;
 
             if (pointsInView > p.width * 2) { // Decimation
-                const step = pointsInView / p.width;
-                for (let i = 0; i < p.width; i++) {
-                    const start = startIndex + Math.floor(i * step);
-                    const end = Math.min(endIndex, startIndex + Math.floor((i + 1) * step));
+                const timeStepPerPixel = viewTimeSpan / p.width;
+                 for (let i = 0; i < p.width; i++) {
+                    const tStart = viewStartTime + i * timeStepPerPixel;
+                    const tEnd = tStart + timeStepPerPixel;
+                    const idxStart = Math.max(startIndex, Math.floor(tStart / dataTimePerPoint));
+                    const idxEnd = Math.min(endIndex, Math.ceil(tEnd / dataTimePerPoint));
+                    if (idxStart >= idxEnd) continue;
                     let min = Infinity, max = -Infinity;
-                    for (let j = start; j < end; j++) {
+                    for (let j = idxStart; j < idxEnd; j++) {
                         const v = voltageData[j];
                         if (v < min) min = v;
                         if (v > max) max = v;
                     }
+                    if (min === Infinity) continue;
                     const x_px = p.x + i;
                     const y_min_px = p.y + ((chInfo.vMax - min) / vRange) * p.height;
                     const y_max_px = p.y + ((chInfo.vMax - max) / vRange) * p.height;
+                    
                     if (i === 0) ctx.moveTo(x_px, y_max_px);
                     ctx.lineTo(x_px, y_max_px);
                     ctx.lineTo(x_px, y_min_px);
                 }
-            } else {
-                for (let i = 0; i < pointsInView; i++) {
-                    const dataIndex = startIndex + i;
-                    const voltage = voltageData[dataIndex];
-                    const x_px = p.x + (dataIndex - view.startIndex) / (view.endIndex - view.startIndex) * p.width;
+            } else { // Direct drawing
+                for (let i = startIndex; i < endIndex; i++) {
+                    const dataTime = i * dataTimePerPoint;
+                    const voltage = voltageData[i];
+                    const x_px = p.x + ((dataTime - viewStartTime) / viewTimeSpan) * p.width;
                     const y_px = p.y + ((chInfo.vMax - voltage) / vRange) * p.height;
-                    if (i === 0) ctx.moveTo(x_px, y_px);
+                    if (i === startIndex) ctx.moveTo(x_px, y_px);
                     else ctx.lineTo(x_px, y_px);
                 }
             }
@@ -764,7 +813,7 @@ function draw() {
 
         function drawPlaceholder(p){ctx.fillStyle='#aaa';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText('No waveform loaded',p.x+p.width/2,p.y+p.height/2);ctx.fillText('Click "Load WFM File" or drop file here',p.x+p.width/2,p.y+p.height/2+30)}
         function drawDragRectangle(){ctx.fillStyle='rgba(0,120,215,0.3)';ctx.strokeStyle='#0078d7';ctx.lineWidth=1;const x=Math.min(dragStart.x,dragEnd.x),y=Math.min(dragStart.y,dragEnd.y),w=Math.abs(dragStart.x-dragEnd.x),h=Math.abs(dragStart.y-dragEnd.y);ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h)}
-        function drawStatsTable(context, state, options) { const { x, y, isExport, colors } = options; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0) return { width: 0, height: 0 }; const activeMeasures = {}; if (isExport) { activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true; } else { activeMeasures.max = document.getElementById('showMaxCheckbox').checked; activeMeasures.min = document.getElementById('showMinCheckbox').checked; activeMeasures.avg = document.getElementById('showAvgCheckbox').checked; activeMeasures.rms = document.getElementById('showRmsCheckbox').checked; } const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return { width: 0, height: 0 }; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = isExport ? 8 : 10; const lineHeight = isExport ? 20 : 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding); if (!x && !y) return { width: tableWidth, height: tableHeight }; context.fillStyle = colors.bg; context.fillRect(x, y, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(x, y, tableWidth, tableHeight); let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2); rows.forEach((rowKey, rowIndex) => { let currentX = x; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = x + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke(); currentX += colWidths[i]; } return { width: tableWidth, height: tableHeight }; }
+        function drawStatsTable(context, state, options) { const { x, y, isExport, colors } = options; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0 || state.isOverlap) return { width: 0, height: 0 }; const activeMeasures = {}; if (isExport) { activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true; } else { activeMeasures.max = document.getElementById('showMaxCheckbox').checked; activeMeasures.min = document.getElementById('showMinCheckbox').checked; activeMeasures.avg = document.getElementById('showAvgCheckbox').checked; activeMeasures.rms = document.getElementById('showRmsCheckbox').checked; } const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return { width: 0, height: 0 }; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = isExport ? 8 : 10; const lineHeight = isExport ? 20 : 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding); if (!x && !y) return { width: tableWidth, height: tableHeight }; context.fillStyle = colors.bg; context.fillRect(x, y, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(x, y, tableWidth, tableHeight); let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2); rows.forEach((rowKey, rowIndex) => { let currentX = x; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = x + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke(); currentX += colWidths[i]; } return { width: tableWidth, height: tableHeight }; }
         function drawStats(plotArea, state) { if (!state || Object.keys(state.waveforms).length === 0) return; drawStatsTable(ctx, state, { x: plotArea.x + 10, y: plotArea.y + 10, isExport: false, colors: { bg: 'rgba(0, 0, 0, 0.6)', grid: '#555555', text: '#fff' } }); }
         function drawCursors(context, plotArea, state) { const { view, cursors } = state; context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = '#f0ad4e'; const refCh = getVisibleChannels(state)[0] || Object.keys(state.channelInfo)[0]; const x1_s = dataToScreen({time: cursors.x1, voltage: 0}, view, state, refCh, plotArea).x, x2_s = dataToScreen({time: cursors.x2, voltage: 0}, view, state, refCh, plotArea).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = '#32f0ad'; const y1_s = dataToScreen({time: 0, voltage: cursors.y1}, view, state, refCh, plotArea).y, y2_s = dataToScreen({time: 0, voltage: cursors.y2}, view, state, refCh, plotArea).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(state); }
         function drawAnnotations(context, targetView, plotArea, state, annotations) { 
@@ -961,11 +1010,10 @@ function draw() {
             if (!state) return;
 
             Object.keys(state.channelInfo).forEach(chId => {
-                const chNum = chId.replace('channel', '');
                 const chInfo = state.channelInfo[chId];
                 const item = document.createElement('div');
                 item.className = 'control-item';
-                item.innerHTML = `<span class="control-label">Ch ${chNum} (${chInfo.units}/div)</span><input type="text" class="control-input" id="${chId}_vscale" data-channel="${chId}">`;
+                item.innerHTML = `<span class="control-label" title="${chInfo.name}">${chInfo.name.substring(0,10)} (${chInfo.units}/div)</span><input type="text" class="control-input" id="${chId}_vscale" data-channel="${chId}">`;
                 container.appendChild(item);
 
                 const input = item.querySelector('input');
@@ -1183,14 +1231,31 @@ async function loadFile(file) {
             tab.className = 'tab-item';
             tab.dataset.index = index;
             tab.innerHTML = `<span class="tab-name" title="${fileName}">${fileName}</span><span class="tab-close">&times;</span>`;
+            
             tab.addEventListener('click', (e) => {
-                if (e.target.classList.contains('tab-close')) { e.stopPropagation(); closeTab(index); } else { switchToTab(index); }
+                if (e.target.classList.contains('tab-close')) { 
+                    e.stopPropagation(); 
+                    if (tabStates[index] && tabStates[index].isOverlap) {
+                         // The create button is not a checkbox anymore, so no need to sync
+                    }
+                    closeTab(index); 
+                } else { 
+                    switchToTab(index); 
+                }
             });
-            tabContainer.appendChild(tab);
+
+            // Insert before the overlap button
+            const overlapBtn = document.getElementById('createOverlapBtn');
+            tabContainer.insertBefore(tab, overlapBtn);
         }
 
         function switchToTab(index) {
-            if (index < 0 || index >= tabStates.length) return;
+            if (index < 0 || index >= tabStates.length) {
+                activeTabIndex = -1;
+                updateUIFromState();
+                draw();
+                return;
+            }
             activeTabIndex = index;
             document.querySelectorAll('.tab-item').forEach(tab => {
                 tab.classList.toggle('active', parseInt(tab.dataset.index) === index);
@@ -1200,25 +1265,22 @@ async function loadFile(file) {
         }
 
         function closeTab(index) {
+            if (index < 0 || index >= tabStates.length) return;
             tabStates.splice(index, 1);
-            tabContainer.innerHTML = '';
+            
+            tabContainer.innerHTML = ''; // Clear all tabs
+            // Re-add the overlap button first
+            tabContainer.appendChild(document.getElementById('createOverlapBtn'));
+            // Rebuild all tabs from the modified state array
             tabStates.forEach((state, i) => addTabToUI(state.fileName, i));
             
+            let newActiveIndex = activeTabIndex;
             if (activeTabIndex === index) {
-                let newIndex = Math.min(index, tabStates.length - 1);
-                if (newIndex >= 0) {
-                    switchToTab(newIndex);
-                } else {
-                    activeTabIndex = -1;
-                    updateUIFromState();
-                    draw();
-                }
+                newActiveIndex = Math.min(index, tabStates.length - 1);
             } else if (activeTabIndex > index) {
-                activeTabIndex--;
-                switchToTab(activeTabIndex);
-            } else {
-                 switchToTab(activeTabIndex);
+                newActiveIndex--;
             }
+            switchToTab(newActiveIndex);
         }
         
         function updateUIFromState() {
@@ -1240,7 +1302,7 @@ async function loadFile(file) {
                 return;
             }
             
-            annotationSelector.style.display = 'flex';
+            annotationSelector.style.display = (state.drawOrder.length > 0) ? 'flex' : 'none';
             document.getElementById('fileInfo').innerHTML = `<div>${state.fileName}</div><div>Points: ${state.metadata.numPoints}</div>`;
             setupChannelUI(state);
             document.getElementById('cursorBtn').classList.toggle('active', state.cursors.enabled);
@@ -1248,11 +1310,15 @@ async function loadFile(file) {
             if(state.cursors.enabled) updateCursorReadouts(state);
             document.getElementById('annotateBtn').classList.toggle('active', state.annotationMode || textAnnotationMode);
             document.getElementById('clearAnnotationsBtn').style.display = (state.annotationMode || textAnnotationMode) ? 'flex' : 'none';
-            document.getElementById('measurement-controls').style.display = document.getElementById('showStatsCheckbox').checked ? 'block' : 'none';
+            document.getElementById('measurement-controls').style.display = document.getElementById('showStatsCheckbox').checked && !state.isOverlap ? 'block' : 'none';
             updateControlsFromView(state);
 
-            updateFileDetailsPanel(state.parser);
-            fileDetailsPanel.style.display = 'block';
+            if (state.parser) {
+                updateFileDetailsPanel(state.parser);
+                fileDetailsPanel.style.display = 'block';
+            } else {
+                fileDetailsPanel.style.display = 'none';
+            }
         }
 
         function updateFileDetailsPanel(parser) {
@@ -1297,38 +1363,50 @@ async function loadFile(file) {
             cursorContainer.innerHTML = '<label><input type="radio" name="cursorTrack" value="null" checked> None</label>';
             annotationSelector.innerHTML = '';
 
-            if (!state) return;
+            if (!state || state.drawOrder.length === 0) return;
             
-            annotationSelector.innerHTML = '<span style="font-size: 13px; color: #ccc;">Select:</span>';
+            annotationSelector.innerHTML = '<span style="font-size: 13px; color: #ccc;">Annotate:</span>';
 
             for (const chId in state.channelInfo) {
-                const chNum = chId.replace('channel', '');
                 const info = state.channelInfo[chId];
                 
                 const btn = document.createElement('button');
-                btn.className = `channel-button ch${chNum}`;
+                btn.className = `channel-button`;
                 btn.classList.toggle('active', info.visible);
+                if(btn.classList.contains('active')) btn.style.background = info.color;
                 btn.dataset.channel = chId;
-                btn.innerHTML = `<span class="ch-name"><i class="fas fa-wave-square" style="color: ${info.color}"></i> Channel ${chNum}</span><span class="ch-order"></span>`;
+                btn.innerHTML = `<span class="ch-name" title="${info.name}"><i class="fas fa-wave-square" style="color: ${info.color}"></i> ${info.name}</span><span class="ch-order"></span>`;
                 btn.addEventListener('click', e => {
+                    if (e.target.closest('.ch-name')) return; // Ignore clicks on the name span for editing
                     const s = getActiveState(); if (!s) return;
-                    e.currentTarget.classList.toggle('active');
-                    s.channelInfo[chId].visible = e.currentTarget.classList.contains('active');
+                    const button = e.currentTarget;
+                    button.classList.toggle('active');
+                    s.channelInfo[chId].visible = button.classList.contains('active');
+                    button.style.background = button.classList.contains('active') ? s.channelInfo[chId].color : '#454545';
                     draw();
                 });
                 btnContainer.appendChild(btn);
-
-                const legendItem = document.createElement('div');
-                legendItem.className = 'control-item';
-                legendItem.innerHTML = `<label for="ch${chNum}NameInput" class="control-label">Ch ${chNum} Legend</label><input type="text" id="ch${chNum}NameInput" value="${info.name}" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">`;
-                legendItem.querySelector('input').addEventListener('input', e => {
-                    const s = getActiveState();
-                    if (s) s.channelInfo[chId].name = e.target.value || `Channel ${chNum}`;
-                });
-                legendContainer.appendChild(legendItem);
+                
+                if (state.isOverlap) {
+                    legendContainer.style.display = 'none';
+                    document.getElementById('swapOrderBtn').style.display = 'none';
+                } else {
+                    legendContainer.style.display = 'block';
+                    document.getElementById('swapOrderBtn').style.display = 'block';
+                    const chNum = chId.replace('channel', '');
+                    const legendItem = document.createElement('div');
+                    legendItem.className = 'control-item';
+                    legendItem.innerHTML = `<label for="ch${chNum}NameInput" class="control-label">Ch ${chNum} Legend</label><input type="text" id="ch${chNum}NameInput" value="${info.name}" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">`;
+                    legendItem.querySelector('input').addEventListener('input', e => {
+                        const s = getActiveState();
+                        if (s) s.channelInfo[chId].name = e.target.value || `Channel ${chNum}`;
+                        setupChannelUI(s); // Redraw to sync names
+                    });
+                    legendContainer.appendChild(legendItem);
+                }
 
                 const radioLabel = document.createElement('label');
-                radioLabel.innerHTML = `<input type="radio" name="cursorTrack" value="${chId}"> CH${chNum}`;
+                radioLabel.innerHTML = `<input type="radio" name="cursorTrack" value="${chId}"> <span title="${info.name}">${info.name.substring(0, 10)}</span>`;
                 radioLabel.querySelector('input').addEventListener('change', e => {
                     const s = getActiveState(); if (s) { s.cursors.trackingChannel = e.target.value; trackCursors(); draw(); }
                 });
@@ -1336,7 +1414,8 @@ async function loadFile(file) {
 
                 const selBtn = document.createElement('button');
                 selBtn.className = 'tool-button';
-                selBtn.textContent = `Ch${chNum}`;
+                selBtn.textContent = info.name.substring(0, 12);
+                selBtn.title = info.name;
                 selBtn.dataset.channel = chId;
                 selBtn.style.padding = '4px 8px';
                 selBtn.style.fontSize = '12px';
@@ -1345,7 +1424,7 @@ async function loadFile(file) {
                 annotationSelector.appendChild(selBtn);
             }
             
-            if (state.drawOrder.length > 0) {
+            if (state.drawOrder.length > 0 && !state.isOverlap) {
                  document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)';
                  if (state.drawOrder.length > 1) {
                        document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
@@ -1358,25 +1437,34 @@ async function loadFile(file) {
         }
 
         function hitTestWaveform(mousePos, state) {
+            if (!state) return null;
             const {x: mouseX, y: mouseY} = mousePos;
-            const {view, waveforms, channelInfo, drawOrder, metadata} = state;
+            
+            for (const ch of [...state.drawOrder].reverse()) {
+                const chInfo = state.channelInfo[ch];
+                if (!chInfo.visible || !state.waveforms[ch]) continue;
 
-            for (const ch of [...drawOrder].reverse()) {
-                if (!channelInfo[ch].visible || !waveforms[ch]) continue;
+                const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
+                const viewStartTime = state.view.startIndex * state.metadata.timePerPoint;
+                const viewTimeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
                 
-                const {time} = screenToData({x: mouseX, y: mouseY}, view, state, ch);
-                const dataIndex = Math.round(time / metadata.timePerPoint);
+                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
+                const timeAtMouse = viewStartTime + ((mouseX - plotArea.x) / plotArea.width) * viewTimeSpan;
+                const dataIndex = Math.round(timeAtMouse / dataTimePerPoint);
 
-                if (dataIndex >= 0 && dataIndex < waveforms[ch].length) {
-                    const waveformVoltage = waveforms[ch][dataIndex];
-                    const screenY = dataToScreen({time: 0, voltage: waveformVoltage}, view, state, ch).y;
-                    if (Math.abs(mouseY - screenY) < 5) {
+                if (dataIndex >= 0 && dataIndex < state.waveforms[ch].length) {
+                    const waveformVoltage = state.waveforms[ch][dataIndex];
+                    const vRange = chInfo.vMax - chInfo.vMin;
+                    const screenY = plotArea.y + ((chInfo.vMax - waveformVoltage) / vRange) * plotArea.height;
+
+                    if (Math.abs(mouseY - screenY) < 8) {
                         return ch;
                     }
                 }
             }
             return null;
         }
+
         function getInteractionAtPos(pos, state) {
             const handleSize = 8, tol = handleSize/2;
             const refCh = getVisibleChannels(state)[0];
@@ -1530,6 +1618,12 @@ async function loadFile(file) {
 
                 updateControlsFromView(state); draw();
             } else {
+                const hitChannelId = hitTestWaveform({ x: e.offsetX, y: e.offsetY }, state);
+                hoveredChannelInfo = hitChannelId ? { name: state.channelInfo[hitChannelId].name, color: state.channelInfo[hitChannelId].color, x: e.offsetX, y: e.offsetY } : null;
+                if (hitChannelId !== lastHoveredChannelId) {
+                    draw();
+                }
+                lastHoveredChannelId = hitChannelId;
                 const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
                 if (zoomModeEnabled) canvas.style.cursor = 'zoom-in';
                 else if (textAnnotationMode) canvas.style.cursor = 'text';
@@ -1721,6 +1815,7 @@ async function loadFile(file) {
         document.getElementById('discreteZoomCheckbox').addEventListener('change', e => { displayOptions.discreteZoom = e.target.checked; });
         document.getElementById('relativeTimeCheckbox').addEventListener('change', e => { displayOptions.relativeTime = e.target.checked; draw(); });
         document.getElementById('separateViewCheckbox').addEventListener('change', e => { displayOptions.separateView = e.target.checked; resizeCanvas(); });
+        document.getElementById('createOverlapBtn').addEventListener('click', createOverlapTab);
         
         document.getElementById('timeScale').addEventListener('change', e => { 
             const state = getActiveState(); if (!state) return; 
@@ -1763,10 +1858,16 @@ async function loadFile(file) {
                     draw();
                 }
             }
+            
             const num = parseInt(e.key);
-            if (!e.ctrlKey && !e.altKey && !isNaN(num) && num >= 1 && num <= 4) {
-                setAnnotationChannel(`channel${num}`);
+            if (state && !e.ctrlKey && !e.altKey && !isNaN(num) && num >= 1 && num <= 9) {
+                if (num - 1 < state.drawOrder.length) {
+                    const targetChannelId = state.drawOrder[num - 1];
+                    setAnnotationChannel(targetChannelId);
+                    e.preventDefault();
+                }
             }
+
             if (e.key === 'Delete' && activeInteraction.type && activeInteraction.index > -1) { if(!state) return; if (activeInteraction.type === 'annotation') { state.annotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'textAnnotation') { state.textAnnotations.splice(activeInteraction.index, 1); } activeInteraction = {type: null}; draw(); }
             if (e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); }
             if (e.key.toLowerCase() === 'z') { if (state && !textAnnotationMode) { zoomModeEnabled = true; canvas.style.cursor = 'zoom-in'; statusText.textContent = 'Zoom Mode: Click and drag on the chart to zoom into an area.'; } }
@@ -1801,8 +1902,10 @@ async function loadFile(file) {
             buttons.forEach(btn => {
                 const isActive = btn.dataset.channel === state.annotationChannel;
                 const chInfo = state.channelInfo[btn.dataset.channel];
-                btn.style.background = isActive ? chInfo.color : '#5e5e5e';
-                btn.style.opacity = isActive ? '1' : '0.6';
+                if (chInfo) {
+                    btn.style.background = isActive ? chInfo.color : '#5e5e5e';
+                    btn.style.opacity = isActive ? '1' : '0.6';
+                }
             });
         }
         function hexToRgba(hex, alpha) {
@@ -1811,6 +1914,53 @@ async function loadFile(file) {
             else if (hex.length == 7) { r = "0x" + hex[1] + hex[2]; g = "0x" + hex[3] + hex[4]; b = "0x" + hex[5] + hex[6]; }
             return `rgba(${+r},${+g},${+b},${alpha})`;
         }
+
+        function createOverlapTab() {
+            destroyOverlapTab(); 
+            const sourceTabs = tabStates.filter(s => !s.isOverlap);
+            if (sourceTabs.length < 1) return;
+            const baseMetadata = { ...sourceTabs[0].metadata };
+            let maxTotalTime = 0;
+            sourceTabs.forEach(s => { if (s.metadata.totalTime > maxTotalTime) maxTotalTime = s.metadata.totalTime; });
+            const mergedState = {
+                fileName: "Overlap", isOverlap: true, parser: null, waveforms: {},
+                metadata: { ...baseMetadata, numPoints: maxTotalTime / baseMetadata.timePerPoint, totalTime: maxTotalTime },
+                channelInfo: {}, drawOrder: [],
+                view: { startIndex: 0, endIndex: Math.ceil(maxTotalTime / baseMetadata.timePerPoint) },
+                cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
+                annotations: [], textAnnotations: [], annotationMode: false, annotationsVisible: true,
+            };
+            let colorIndex = 0;
+            sourceTabs.forEach(sourceState => {
+                getVisibleChannels(sourceState).forEach(chId => {
+                    const newChId = `${sourceState.fileName}_${chId}`;
+                    const sourceChInfo = sourceState.channelInfo[chId];
+                    mergedState.waveforms[newChId] = sourceState.waveforms[chId];
+                    mergedState.channelInfo[newChId] = {
+                        ...sourceChInfo,
+                        name: `${sourceState.fileName.replace(/\.wfm$/i, '')} - ${sourceChInfo.name}`,
+                        color: OVERLAP_COLORS[colorIndex % OVERLAP_COLORS.length],
+                        originalMetadata: sourceState.metadata,
+                    };
+                    mergedState.drawOrder.push(newChId);
+                    colorIndex++;
+                });
+            });
+            if (mergedState.drawOrder.length === 0) return;
+            if (mergedState.drawOrder.length > 0) mergedState.annotationChannel = mergedState.drawOrder[0];
+            const newIndex = tabStates.length;
+            tabStates.push(mergedState);
+            addTabToUI(mergedState.fileName, newIndex);
+            switchToTab(newIndex);
+        }
+
+        function destroyOverlapTab() {
+            const overlapTabIndex = tabStates.findIndex(s => s.isOverlap);
+            if (overlapTabIndex > -1) {
+                closeTab(overlapTabIndex);
+            }
+        }
+
          function setupModals() {
                const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
                document.getElementById('aboutBtn').addEventListener('click', () => { 
@@ -1841,7 +1991,7 @@ async function loadFile(file) {
                   const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
                   const newFilename = `${originalFilename}_export.${options.format}`;
                   if (options.format === 'csv') {
-                      alert('CSV export is not fully implemented in this version.'); 
+                      generateAndDownloadCSV(options);
                   } else if (options.format === 'svg') {
                        try {
                            const svgString = generateSVG(options);
@@ -1867,6 +2017,46 @@ async function loadFile(file) {
                });
           }
         
+          function generateAndDownloadCSV(options) {
+            const state = getActiveState();
+            if (!state) { alert("No active waveform to export."); return; }
+            const visibleChannels = getVisibleChannels(state);
+            if (visibleChannels.length === 0) { alert("No visible channels to export."); return; }
+            const startIndex = options.content === 'current' ? Math.floor(state.view.startIndex) : 0;
+            const endIndex = options.content === 'current' ? Math.ceil(state.view.endIndex) : state.metadata.numPoints;
+            const timeStep = state.metadata.timePerPoint;
+            const headers = ['Time (s)'];
+            visibleChannels.forEach(chId => {
+                const chInfo = state.channelInfo[chId];
+                headers.push(`${chInfo.name} (${chInfo.units})`);
+            });
+            let csvString = headers.map(h => `"${h}"`).join(',') + '\r\n';
+            for (let i = startIndex; i < endIndex; i++) {
+                if (i >= 0 && i < state.metadata.numPoints) {
+                    const rowData = [(i * timeStep).toExponential(6)];
+                    visibleChannels.forEach(chId => {
+                        const val = state.waveforms[chId][i];
+                        rowData.push(val !== undefined ? val.toExponential(6) : '');
+                    });
+                    csvString += rowData.map(d => `"${d}"`).join(',') + '\r\n';
+                }
+            }
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+            const newFilename = `${originalFilename}_${options.content}.csv`;
+            const link = document.createElement("a");
+            if(link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", newFilename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+          }
+
           function generateSVG(options) {
                  const state = getActiveState();
                  if (!state) return '';
@@ -1929,6 +2119,36 @@ async function loadFile(file) {
                  svg += `</svg>`;
                  return svg;
           }
+
+        document.getElementById('channelButtonContainer').addEventListener('click', (e) => {
+            const nameSpan = e.target.closest('.ch-name');
+            if (!nameSpan || channelButtonContainer.querySelector('input')) return;
+            const state = getActiveState();
+            if (!state) return;
+            const button = nameSpan.closest('.channel-button');
+            const chId = button.dataset.channel;
+            const originalName = state.channelInfo[chId].name;
+            const icon = nameSpan.querySelector('i');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = originalName;
+            Object.assign(input.style, { width: 'calc(100% - 25px)', backgroundColor: '#333', border: '1px solid #0078d7', color: 'white', padding: '2px', marginLeft: '5px' });
+            nameSpan.innerHTML = '';
+            nameSpan.appendChild(icon);
+            nameSpan.appendChild(input);
+            input.focus();
+            input.select();
+            const finalizeEdit = () => {
+                const newName = input.value.trim() || originalName;
+                state.channelInfo[chId].name = newName;
+                setupChannelUI(state);
+            };
+            input.addEventListener('blur', finalizeEdit);
+            input.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter') finalizeEdit();
+                else if (ev.key === 'Escape') setupChannelUI(state);
+            });
+        });
 
         setupModals();
         new ResizeObserver(resizeCanvas).observe(document.getElementById('waveformContainer'));
