@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Universal WFM Waveform Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
         html, body { height: 100%; overflow: hidden; }
@@ -42,10 +43,13 @@
         .control-label { font-size: 14px; color: #a0a0a0; }
         .control-input { width: 110px; padding: 4px 8px; background: #454545; border: 1px solid #5a5a5a; border-radius: 4px; color: white; font-size: 13px; font-family: Consolas, monospace;}
         .checkbox-item { margin-top: 15px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-        .channel-button { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: #454545; border: none; border-radius: 4px; color: white; cursor: pointer; margin-bottom: 8px; width: 100%; transition: background 0.2s; font-size: 15px; }
+        .channel-button { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: #454545; border: none; border-radius: 4px; color: white; cursor: pointer; margin-bottom: 8px; width: 100%; transition: background 0.2s; font-size: 15px; gap: 8px;}
         .channel-button.active { /* Color is now set dynamically via JS */ }
-        .channel-button .ch-name { flex-grow: 1; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+        .channel-button .ch-name { flex-grow: 1; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
         .channel-button .ch-order { font-size: 12px; color: #ccc; }
+        .ch-color-picker { -webkit-appearance: none; -moz-appearance: none; appearance: none; width: 22px; height: 22px; background-color: transparent; border: 1px solid #888; border-radius: 4px; cursor: pointer; padding: 2px; }
+        .ch-color-picker::-webkit-color-swatch { border-radius: 2px; border: none; }
+        .ch-color-picker::-moz-color-swatch { border-radius: 2px; border: none; }
         .file-input { display: none; }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100; display: none; align-items: center; justify-content: center; }
         .modal-content { background: #3c3c3c; padding: 30px; border-radius: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.5); width: 90%; max-width: 500px; position: relative; border-top: 3px solid #0078d7; }
@@ -94,9 +98,10 @@
         <div class="sidebar">
             <div class="file-panel">
                 <div class="panel-title">File Operations</div>
-                <button class="tool-button" id="loadBtn" style="width: 100%"><i class="fas fa-folder-open"></i> Load WFM File</button>
-                <input type="file" id="fileInput" class="file-input" accept=".wfm" multiple>
-                <button class="tool-button" id="exportBtn" style="width: 100%; margin-top: 12px"><i class="fas fa-save"></i> Export...</button>
+                <button class="tool-button" id="loadBtn" style="width: 100%"><i class="fas fa-folder-open"></i> Load File</button>
+                <input type="file" id="fileInput" class="file-input" accept=".wfm,.csv,.graphx" multiple>
+                <button class="tool-button" id="saveSessionBtn" style="width: 100%; margin-top: 12px;"><i class="fas fa-project-diagram"></i> Save Session</button>
+                <button class="tool-button" id="exportBtn" style="width: 100%; margin-top: 12px;"><i class="fas fa-file-export"></i> Export...</button>
                 <div class="file-info" id="fileInfo"><div style="margin-bottom: 8px">Drop a file or click Load</div><div>Points: -</div></div>
             </div>
              <div class="control-panel">
@@ -104,8 +109,6 @@
                 <div id="channelButtonContainer">
                 </div>
                 <button class="tool-button" id="swapOrderBtn" style="width:100%; margin-top: 8px;"><i class="fas fa-layer-group"></i> Swap Order</button>
-                <div class="sub-panel" id="channelLegendContainer">
-                        </div>
             </div>
             <div class="control-panel">
                 <div class="panel-title">Display Controls</div>
@@ -129,7 +132,7 @@
                     <label for="relativeTimeCheckbox"><input type="checkbox" id="relativeTimeCheckbox"> Relative Time (t=0)</label>
                 </div>
                  <div class="checkbox-item">
-                    <label for="bwCopyCheckbox"><input type="checkbox" id="bwCopyCheckbox"> B&W Copy (Ctrl+C)</label>
+                    <label for="wbCopyCheckbox"><input type="checkbox" id="wbCopyCheckbox"> White BG Copy (Ctrl+C)</label>
                 </div>
                 <div class="checkbox-item">
                     <label for="separateViewCheckbox"><input type="checkbox" id="separateViewCheckbox"> Separate Diagrams</label>
@@ -149,11 +152,11 @@
                   <div class="sub-panel">
                       <div class="control-label" style="margin-bottom: 8px;">Cursor Tracking</div>
                       <div id="cursorTrackContainer" style="display: flex; justify-content: space-around; font-size: 13px; flex-wrap: wrap; gap: 5px;">
-                              <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
+                                <label><input type="radio" name="cursorTrack" value="null" checked> None</label>
                           </div>
                       <div style="display: flex; gap: 8px; margin-top: 12px;">
-                              <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
-                              <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
+                                <button class="tool-button" id="setToViewMaxBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Max</button>
+                                <button class="tool-button" id="setToViewMinBtn" style="flex:1; font-size: 13px; padding: 6px;">Set to View Min</button>
                       </div>
                   </div>
             </div>
@@ -179,8 +182,8 @@
     </div>
     <div class="status-bar">
         <div class="window-title">Advanced WFM Viewer</div>
-        <div id="statusText" style="flex: 1;">Ready to load WFM file</div>
-        <div>Viewer v22.5</div>
+        <div id="statusText" style="flex: 1;">Ready to load file</div>
+        <div>Viewer v22.9</div>
     </div>
 
     <div class="modal-overlay" id="aboutModal">
@@ -196,12 +199,13 @@
                 <li><span>Toggle Area Zoom Mode (1-time use)</span><code>Z Key</code></li>
                 <li><span>Hide/Show Annotations</span><code>Ctrl + H</code></li>
                 <li><span>Select Annotation Scale (Nth Channel)</span><code>1 - 9 Keys</code></li>
-                <li><span>Pan Chart (X & Y)</span><code>Mouse Drag (empty area)</code></li>
+                <li><span>Paste Data from Clipboard</span><code>Ctrl + V</code></li>
                 <li><span>Move Channel (Y-Axis)</span><code>Mouse Drag (on trace)</code></li>
                 <li><span>Zoom (X-Axis)</span><code>Scroll over Chart</code></li>
                 <li><span>Zoom (Y-Axis)</span><code>Scroll over Channel's Y-Axis</code></li>
                 <li><span>Copy to Clipboard (PNG)</span><code>Ctrl + C</code></li>
                 <li><span>Add Text Annotation</span><code>T Key</code></li>
+                <li><span>Add Point Annotation</span><code>P Key</code></li>
                 <li><span>Measure / Annotate area</span><code>Shift + Drag</code></li>
                 <li><span>Delete Annotation</span><code>Click to Select + Delete Key</code></li>
             </ul>
@@ -229,7 +233,7 @@
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
-                      <label style="margin-right: 15px;"><input type="checkbox" id="bwExportCheckbox"> Black & White</label>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="wbExportCheckbox"> White Background</label>
                       <br><br>
                       <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
                   </div>
@@ -254,24 +258,61 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="loadOptionsModal">
-        <div class="modal-content">
+    <div class="modal-overlay" id="csvOptionsModal">
+        <div class="modal-content" style="max-width: 700px;">
             <span class="modal-close">&times;</span>
-            <h2>Confirm Waveform Settings</h2>
-            <p id="loadOptionsFileName" style="color: #ccc; margin-bottom: 15px;"></p>
-            <div class="load-options-info" id="loadOptionsInfo"></div>
-            <div class="load-options-channels" id="loadOptionsChannels"></div>
+            <h2>CSV Import Options</h2>
+            <p id="csvOptionsFileName" style="color: #ccc; margin-bottom: 15px;"></p>
+            
+            <div class="panel-title" style="font-size: 14px; margin-bottom: 5px;">File Preview</div>
+            <pre id="csvPreviewContent" style="background: #2d2d2d; border: 1px solid #555; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; white-space: pre;"></pre>
+
+            <div class="panel-title" style="font-size: 14px; margin-top: 20px; margin-bottom: 10px;">Parsing Options</div>
+            <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
+                <div class="control-item" style="margin-bottom: 0;">
+                    <span class="control-label">Delimiter:</span>
+                    <input type="text" id="csvDelimiter" value="," class="control-input" style="width: 50px;">
+                </div>
+                <div class="checkbox-item" style="margin-top: 0;">
+                    <label for="csvHasHeader"><input type="checkbox" id="csvHasHeader" checked> First row is header</label>
+                </div>
+            </div>
+
+            <div class="panel-title" style="font-size: 14px; margin-bottom: 10px;">Column Roles</div>
+            <div id="csvColumnMapping" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 10px;">
+                </div>
+
             <div class="modal-footer">
-                <button class="modal-button modal-cancel-btn" id="loadOptionsCancel">Cancel</button>
-                <button class="modal-button modal-confirm-btn" id="loadOptionsConfirm">Load Waveform</button>
+                <button class="modal-button modal-cancel-btn" id="csvOptionsCancel">Cancel</button>
+                <button class="modal-button modal-confirm-btn" id="csvOptionsConfirm">Load CSV</button>
             </div>
         </div>
     </div>
 
+    <div class="modal-overlay" id="pasteModal">
+        <div class="modal-content">
+          <span class="modal-close">&times;</span>
+          <h2>Single Column Paste Options</h2>
+          <p style="margin: 15px 0;">Please define the X-axis for the pasted data.</p>
+          <div class="control-item">
+            <label for="pasteTimeStart" class="control-label">Time Start:</label>
+            <input type="text" id="pasteTimeStart" value="0" class="control-input">
+          </div>
+          <div class="control-item">
+            <label for="pasteTimeStep" class="control-label">Time Step:</label>
+            <input type="text" id="pasteTimeStep" value="1" class="control-input">
+          </div>
+          <div class="modal-footer">
+            <button class="modal-button modal-cancel-btn" id="pasteCancelBtn">Cancel</button>
+            <button class="modal-button modal-confirm-btn" id="pasteConfirmBtn">Load Data</button>
+          </div>
+        </div>
+      </div>
+
     <div id="drag-overlay">
         <div class="drag-overlay-content">
             <i class="fas fa-file-import"></i>
-            <span>Drop WFM file(s) here</span>
+            <span>Drop WFM, CSV, or GRAPHX file(s) here</span>
         </div>
     </div>
 
@@ -357,12 +398,118 @@
         }
     }
 
+    // --- PARSER FOR CSV FILES ---
+    class CsvParser {
+        constructor(csvText, options) {
+            this.timeData = [];
+            this.channelData = {};
+            this.channelNames = [];
+            this.timePerPoint = 0;
+            this.numPoints = 0;
+            this.error = null;
+
+            try {
+                this._parse(csvText, options);
+            } catch (e) {
+                this.error = e.message;
+                console.error("CSV Parsing Error:", e);
+            }
+        }
+
+        _parse(csvText, options) {
+            const { delimiter, hasHeader, timeColumnIndex, dataColumnIndices, autoTime } = options;
+            const lines = csvText.replace(/\r/g, '').split('\n').filter(line => line.trim() !== '');
+
+            if (lines.length < (hasHeader ? 2 : 1)) {
+                throw new Error("CSV must have at least one data row.");
+            }
+
+            const startRow = hasHeader ? 1 : 0;
+            const headers = hasHeader ? lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, '')) : [];
+
+            if (dataColumnIndices.length === 0) {
+                throw new Error("No data columns selected for import.");
+            }
+            
+            // Determine channel names
+            dataColumnIndices.forEach((colIndex, i) => {
+                const name = (hasHeader && headers[colIndex]) ? headers[colIndex] : `f(x) ${dataColumnIndices.length > 1 ? (i + 1) : ''}`.trim();
+                this.channelNames.push(name);
+                this.channelData[name] = [];
+            });
+
+            // Parse data rows
+            for (let i = startRow; i < lines.length; i++) {
+                const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+                
+                // Time data
+                if (autoTime) {
+                    this.timeData.push(i - startRow); // Simple index as time
+                } else {
+                    const timeVal = parseFloat(values[timeColumnIndex]);
+                    if (isNaN(timeVal)) continue; // Skip rows with invalid time data
+                    this.timeData.push(timeVal);
+                }
+                
+                // Channel data
+                dataColumnIndices.forEach((colIndex, chIndex) => {
+                    const chName = this.channelNames[chIndex];
+                    const val = parseFloat(values[colIndex]);
+                    this.channelData[chName].push(isNaN(val) ? 0 : val);
+                });
+            }
+            
+            if (this.timeData.length < 2) {
+                throw new Error("Not enough valid data points in CSV to process.");
+            }
+            
+            this.numPoints = this.timeData.length;
+            this.timePerPoint = autoTime ? 1 : (this.timeData[1] - this.timeData[0]);
+
+            // Convert to Float32Array
+            for (const name of this.channelNames) {
+                this.channelData[name] = new Float32Array(this.channelData[name]);
+            }
+        }
+        
+        isValid() { return !this.error && this.numPoints > 0; }
+        getTimeScale() { return this.timePerPoint; }
+        getNumDataPoints() { return this.numPoints; }
+        getVoltageUnits(chName) { 
+             const match = chName.match(/\((.*?)\)/);
+             return match ? match[1] : 'V';
+        }
+        getChannelData(chName) { return this.channelData[chName] || null; }
+    }
+
+    // --- DUMMY PARSER FOR PASTED DATA ---
+    class PastedDataParser {
+        constructor(dataArray, options) {
+            this.data = new Float32Array(dataArray);
+            this.timePerPoint = options.step;
+            // The first time value is derived from the startIndex of the view, not stored here.
+        }
+        isValid() { return true; }
+        getTimeScale() { return this.timePerPoint; }
+        getNumDataPoints() { return this.data.length; }
+        getVoltageUnits() { return 'V'; }
+        getChannelData(chName) { return this.data; }
+        // Dummy methods to satisfy createDefaultTabState
+        isChannelWritten(c) { return c===1; }
+        getChannelNames() { return ['Pasted Data']; }
+    }
+
+
     document.addEventListener('DOMContentLoaded', function() {
         const canvas = document.getElementById('waveformCanvas');
         const ctx = canvas.getContext('2d');
         const tabContainer = document.getElementById('tabContainer');
         const dragOverlay = document.getElementById('drag-overlay');
         const statusText = document.getElementById('statusText');
+        const csvOptionsModal = document.getElementById('csvOptionsModal');
+        const pasteModal = document.getElementById('pasteModal');
+        let tempCsvData = { text: '', fileName: '' };
+        let tempPastedData = null;
 
         let tabStates = [];
         let activeTabIndex = -1;
@@ -374,6 +521,7 @@
         let activeInteraction = { type: null, index: -1, handle: null, channel: null };
         let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false, separateView: false };
         let textAnnotationMode = false;
+        let pointAnnotationMode = false;
         let lastMousePos = { x: 0, y: 0 };
         let hoveredChannelInfo = null;
         let lastHoveredChannelId = null;
@@ -387,28 +535,67 @@
         const SEPARATE_VIEW_GAP = 20;
         const OVERLAP_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94'];
 
-        let lastRigolMultiplier = {};
-
         function createDefaultTabState(fileName, parser, overrides = {}, timeMultiplier = 1) {
             const timePerPoint = parser.getTimeScale() * timeMultiplier;
             const numPoints = parser.getNumDataPoints();
             
             const newState = {
                 fileName: fileName,
-                parser: parser,
+                parser: parser, // Store parser for file details, but don't rely on it for saving state
                 waveforms: {},
                 metadata: { timePerPoint: timePerPoint, totalTime: numPoints * timePerPoint, numPoints: numPoints },
                 channelInfo: {},
                 drawOrder: [],
                 view: { startIndex: 0, endIndex: numPoints },
                 cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
-                annotations: [], textAnnotations: [], annotationMode: false,
+                annotations: [], textAnnotations: [], pointAnnotations: [], annotationMode: false,
                 annotationsVisible: true,
                 annotationChannel: null,
                 isOverlap: false,
             };
 
-            if (parser instanceof TekWfmParser) {
+            if (parser instanceof PastedDataParser) {
+                const data = parser.getChannelData();
+                let min = Infinity, max = -Infinity;
+                for(const v of data) {
+                    if (v < min) min = v;
+                    if (v > max) max = v;
+                }
+                const margin = (max - min) * 0.1 || 1;
+                const chName = 'Pasted Data';
+                newState.waveforms[chName] = data;
+                newState.drawOrder.push(chName);
+                newState.channelInfo[chName] = {
+                    name: chName, visible: true, color: OVERLAP_COLORS[0], units: parser.getVoltageUnits(),
+                    vMin: min - margin, vMax: max + margin
+                };
+                // For pasted data, the time starts from the specified value.
+                const timeStart = overrides.start || 0;
+                newState.metadata.timeStart = timeStart;
+                newState.view.startIndex = timeStart / timePerPoint;
+                newState.view.endIndex = (timeStart / timePerPoint) + numPoints;
+            } else if (parser instanceof CsvParser) {
+                let colorIdx = 0;
+                parser.channelNames.forEach(chName => {
+                    const data = parser.getChannelData(chName);
+                    if (data) {
+                        let min = Infinity, max = -Infinity;
+                        for(const v of data) {
+                            if (v < min) min = v;
+                            if (v > max) max = v;
+                        }
+                        const margin = (max - min) * 0.1 || 1;
+
+                        newState.waveforms[chName] = data;
+                        newState.drawOrder.push(chName);
+                        newState.channelInfo[chName] = {
+                            name: chName, visible: true, color: OVERLAP_COLORS[colorIdx % OVERLAP_COLORS.length], units: parser.getVoltageUnits(chName),
+                            vMin: min - margin, vMax: max + margin
+                        };
+                        colorIdx++;
+                    }
+                });
+            } else if (parser instanceof TekWfmParser) {
                 const data = parser.getChannelData(1);
                 const userVoltsPerDiv = parser.getUserVoltsPerDiv();
                 const userVertOffsetDivs = parser.getUserVerticalOffset();
@@ -455,7 +642,7 @@
         function parseEng(str) { if (typeof str !== 'string' || !str) return NaN; const suffixes = { f: 1e-15, p: 1e-12, n: 1e-9, u: 1e-6, µ: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }; str = str.trim(); const numPart = parseFloat(str); if (isNaN(numPart)) return NaN; const suffixMatch = str.match(/[a-zA-Zµ]+$/); const suffix = suffixMatch ? suffixMatch[0] : null; const multiplier = suffixes[suffix] || 1; return numPart * multiplier; }
         function getVisibleChannels(state) {
             if (!state) return [];
-            return state.drawOrder.filter(ch => state.channelInfo[ch].visible && state.waveforms[ch]);
+            return state.drawOrder.filter(ch => state.channelInfo[ch] && state.channelInfo[ch].visible && state.waveforms[ch]);
         }
         function getDynamicPadding(state) {
             if (!state) return { ...PADDING_STATIC, left: Y_AXIS_WIDTH + 10 };
@@ -484,21 +671,23 @@
                  const chInfo = state.channelInfo[targetChannelId];
                  voltage = chInfo.vMax - (screenPos.y - p.y) * (chInfo.vMax - chInfo.vMin) / p.height;
             }
-
-            const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint);
+            
+            const timeOffset = state.metadata.timeStart || 0;
+            const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint) + timeOffset;
             return { time, voltage };
         }
         function dataToScreen(dataPos, view, state, channelId, plotArea) {
             const { width, height } = canvas.getBoundingClientRect();
             const p = plotArea || getPlotArea(width, height, state);
-            if (!view || !state || !channelId || !state.channelInfo[channelId]) return {x: 0, y: 0};
+            if (!view || !state || !channelId || !state.channelInfo[channelId] || !p.width || !p.height) return {x: 0, y: 0};
             
             const chInfo = state.channelInfo[channelId];
             const viewTimeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
             const viewVoltSpan = chInfo.vMax - chInfo.vMin;
             if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return {x: p.x, y: p.y + p.height / 2};
             
-            const viewStartTime = view.startIndex * state.metadata.timePerPoint;
+            const timeOffset = state.metadata.timeStart || 0;
+            const viewStartTime = (view.startIndex * state.metadata.timePerPoint) + timeOffset;
 
             return {
                 x: p.x + ((dataPos.time - viewStartTime) / viewTimeSpan) * p.width,
@@ -511,16 +700,29 @@
         function draw() {
             requestAnimationFrame(() => {
                 const state = getActiveState();
+                const colors = {
+                    bg: '#1e1e1e',
+                    grid: '#333',
+                    text: '#a0a0a0',
+                    axisBorder: '#888',
+                    cursorTime: '#f0ad4e',
+                    cursorVolt: '#32f0ad',
+                    selection: '#00bcf2'
+                };
+                drawToContext(ctx, state, colors);
+            });
+        }
+        
+        function drawToContext(context, state, colors) {
                 const { width, height } = canvas.getBoundingClientRect();
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#1e1e1e';
-                ctx.fillRect(0, 0, width, height);
+                context.fillStyle = colors.bg;
+                context.fillRect(0, 0, width, height);
                 
                 if (!state || Object.keys(state.waveforms).length === 0) {
                     const plotArea = getPlotArea(width, height, null);
-                    drawGrid(plotArea);
-                    drawPlaceholder(plotArea);
-                    drawAxisLabels(plotArea, null, null);
+                    drawGrid(context, plotArea, colors);
+                    drawPlaceholder(context, plotArea, colors);
+                    drawAxisLabels(context, plotArea, null, null, null, colors);
                     return;
                 }
                 
@@ -541,126 +743,120 @@
                                 height: individualPlotHeight
                             };
 
-                            drawGrid(plotArea, true, index === visibleChannels.length - 1);
-                            drawAxisLabels(plotArea, state.view, state, ch);
+                            drawGrid(context, plotArea, colors, true, index === visibleChannels.length - 1);
+                            drawAxisLabels(context, plotArea, state.view, state, ch, colors);
 
-                            ctx.save();
-                            ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                            ctx.clip();
-                            drawWaveform(state, ch, plotArea);
-                            if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
-                            drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
-                            drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
-                            ctx.restore();
+                            context.save();
+                            context.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                            context.clip();
+                            drawWaveform(context, state, ch, plotArea, colors);
+                            if (state.cursors.enabled) drawCursors(context, plotArea, state, colors);
+                            drawAnnotations(context, state.view, plotArea, state, colors);
+                            drawTextAnnotations(context, state.view, plotArea, state, colors);
+                            drawPointAnnotations(context, state.view, plotArea, state, colors);
+                            context.restore();
 
-                            ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
-                            ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                            context.strokeStyle = colors.axisBorder; context.lineWidth = 1;
+                            context.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
                         });
                     }
                 } else {
                     const plotArea = getPlotArea(width, height, state);
-                    drawGrid(plotArea, false, true);
-                    drawAxisLabels(plotArea, state.view, state);
+                    drawGrid(context, plotArea, colors, false, true);
+                    drawAxisLabels(context, plotArea, state.view, state, null, colors);
                     
-                    ctx.save();
-                    ctx.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                    ctx.clip();
+                    context.save();
+                    context.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    context.clip();
                     
                     state.drawOrder.forEach(ch => { 
-                        if (state.channelInfo[ch].visible && state.waveforms[ch]) {
-                            drawWaveform(state, ch, plotArea);
+                        if (state.channelInfo[ch] && state.channelInfo[ch].visible && state.waveforms[ch]) {
+                            drawWaveform(context, state, ch, plotArea, colors);
                         }
                     });
                     
-                    if (state.cursors.enabled) drawCursors(ctx, plotArea, state);
-                    drawAnnotations(ctx, state.view, plotArea, state, state.annotations);
-                    drawTextAnnotations(ctx, state.view, plotArea, state, state.textAnnotations);
-                    ctx.restore();
+                    if (state.cursors.enabled) drawCursors(context, plotArea, state, colors);
+                    drawAnnotations(context, state.view, plotArea, state, colors);
+                    drawTextAnnotations(context, state.view, plotArea, state, colors);
+                    drawPointAnnotations(context, state.view, plotArea, state, colors);
+                    context.restore();
                     
-                    ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
-                    ctx.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-                    if (displayOptions.showStats) drawStats(plotArea, state);
+                    context.strokeStyle = colors.axisBorder; context.lineWidth = 1;
+                    context.strokeRect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+                    if (displayOptions.showStats) drawStats(context, plotArea, state, colors);
                 }
                 
-                if (activeInteraction.type === 'zoom-drag' || activeInteraction.type === 'measure-drag') {
-                    drawDragRectangle();
-                    if (activeInteraction.type === 'measure-drag') {
-                        const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
-                        if (w > 5 && h > 5) {
-                            let p_area = null;
-                            const dragRefCh = state.annotationChannel || getVisibleChannels(state)[0];
-
-                            if (displayOptions.separateView && visibleChannels.length > 0) {
-                                const PADDING = getDynamicPadding(state);
-                                const totalPlotHeight = height - PADDING.top - PADDING.bottom;
-                                const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
-                                const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
-                                if (individualPlotHeight > 0) {
-                                    const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
-                                    const relativeY = dragStart.y - PADDING.top;
-                                    const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
-                                    
-                                    if (blockIndex < visibleChannels.length) {
-                                        p_area = {
-                                            x: PADDING.left,
-                                            y: PADDING.top + blockIndex * blockHeight,
-                                            width: width - PADDING.left - PADDING.right,
-                                            height: individualPlotHeight
-                                        };
-                                    }
-                                }
-                            } else {
-                                p_area = getPlotArea(width, height, state);
-                            }
-
-                            if (dragRefCh && p_area) {
-                                const chInfo = state.channelInfo[dragRefCh];
-                                const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, dragRefCh, p_area);
-                                const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, dragRefCh, p_area);
-                                const dt = Math.abs(t_end - t_start);
-                                const dV = Math.abs(v_end - v_start);
-                                const freq = dt > 0 ? 1 / dt : 0;
-                                
-                                const bgColor = hexToRgba(chInfo.color, 0.2);
-                                const textColor = chInfo.color;
-
-                                const text1 = `Δt: ${formatEng(dt, 's')}`;
-                                const text2 = `1/Δt: ${formatEng(freq, 'Hz')}`;
-                                const text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
-                                
-                                ctx.font = '13px Segoe UI';
-                                const w1 = ctx.measureText(text1).width;
-                                const w2 = ctx.measureText(text2).width;
-                                const w3 = ctx.measureText(text3).width;
-                                const boxWidth = Math.max(w1, w2, w3) + 20;
-                                const boxHeight = 70;
-                                let boxX = Math.max(dragStart.x, dragEnd.x) + 10;
-                                let boxY = dragEnd.y - boxHeight / 2;
-
-                                if (boxX + boxWidth > width) { boxX = Math.min(dragStart.x, dragEnd.x) - boxWidth - 10; }
-                                if (boxY < 0) { boxY = 5; }
-                                if (boxY + boxHeight > height) { boxY = height - boxHeight - 5; }
-
-                                ctx.fillStyle = bgColor;
-                                ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-                                
-                                ctx.fillStyle = textColor;
-                                ctx.font = ` 13px Segoe UI`;
-                                ctx.textAlign = 'left';
-                                ctx.textBaseline = 'top';
-                                ctx.fillText(text1, boxX + 10, boxY + 5);
-                                ctx.fillText(text2, boxX + 10, boxY + 25);
-                                ctx.fillText(text3, boxX + 10, boxY + 45);
-                            }
+                if (context === ctx) {
+                    if (activeInteraction.type === 'zoom-drag' || activeInteraction.type === 'measure-drag') {
+                        drawDragRectangle();
+                        if (activeInteraction.type === 'measure-drag') {
+                            drawLiveMeasurementBox(state);
                         }
                     }
+                     if (hoveredChannelInfo) {
+                         drawHoverTooltip();
+                     }
                 }
-                 if (hoveredChannelInfo) {
-                    drawHoverTooltip();
-                }
-            });
         }
         
+        function drawLiveMeasurementBox(state) {
+            const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
+            if (w < 5 || h < 5) return;
+
+            const { width, height } = canvas.getBoundingClientRect();
+            let p_area = null;
+            const dragRefCh = state.annotationChannel || getVisibleChannels(state)[0];
+            const visibleChannels = getVisibleChannels(state);
+
+            if (displayOptions.separateView && visibleChannels.length > 0 && !state.isOverlap) {
+                const PADDING = getDynamicPadding(state);
+                const totalPlotHeight = height - PADDING.top - PADDING.bottom;
+                const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
+                const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visibleChannels.length;
+                if (individualPlotHeight > 0) {
+                    const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
+                    const relativeY = dragStart.y - PADDING.top;
+                    const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
+                    
+                    if (blockIndex < visibleChannels.length) {
+                        p_area = {
+                            x: PADDING.left,
+                            y: PADDING.top + blockIndex * blockHeight,
+                            width: width - PADDING.left - PADDING.right,
+                            height: individualPlotHeight
+                        };
+                    }
+                }
+            } else {
+                p_area = getPlotArea(width, height, state);
+            }
+
+            if (dragRefCh && p_area) {
+                const chInfo = state.channelInfo[dragRefCh];
+                const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, dragRefCh, p_area);
+                const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, dragRefCh, p_area);
+                const dt = Math.abs(t_end - t_start), dV = Math.abs(v_end - v_start), freq = dt > 0 ? 1 / dt : 0;
+                
+                const bgColor = hexToRgba(chInfo.color, 0.2), textColor = chInfo.color;
+                const text1 = `Δt: ${formatEng(dt, 's')}`, text2 = `1/Δt: ${formatEng(freq, 'Hz')}`, text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
+                
+                ctx.font = '13px Segoe UI';
+                const boxWidth = Math.max(ctx.measureText(text1).width, ctx.measureText(text2).width, ctx.measureText(text3).width) + 20;
+                const boxHeight = 70;
+                let boxX = Math.max(dragStart.x, dragEnd.x) + 10, boxY = dragEnd.y - boxHeight / 2;
+
+                if (boxX + boxWidth > width) { boxX = Math.min(dragStart.x, dragEnd.x) - boxWidth - 10; }
+                if (boxY < 0) { boxY = 5; }
+                if (boxY + boxHeight > height) { boxY = height - boxHeight - 5; }
+
+                ctx.fillStyle = bgColor; ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+                ctx.fillStyle = textColor; ctx.font = ` 13px Segoe UI`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                ctx.fillText(text1, boxX + 10, boxY + 5);
+                ctx.fillText(text2, boxX + 10, boxY + 25);
+                ctx.fillText(text3, boxX + 10, boxY + 45);
+            }
+        }
+
         function drawHoverTooltip() {
             if (!hoveredChannelInfo) return;
             const { name, color, x, y } = hoveredChannelInfo;
@@ -669,8 +865,7 @@
             const textWidth = ctx.measureText(name).width;
             const boxWidth = textWidth + 2 * padding;
             const boxHeight = 28;
-            let boxX = x + 15;
-            let boxY = y + 15;
+            let boxX = x + 15, boxY = y + 15;
             const canvasRect = canvas.getBoundingClientRect();
             if (boxX + boxWidth > canvasRect.width) { boxX = x - boxWidth - 15; }
             if (boxY + boxHeight > canvasRect.height) { boxY = y - boxHeight - 15; }
@@ -685,7 +880,7 @@
             ctx.fillText(name, boxX + padding, boxY + boxHeight / 2);
         }
         
-                function formatEng(v, u, p = 3, includeUnit = true){ 
+               function formatEng(v, u, p = 3, includeUnit = true){ 
             if(isNaN(v) || v === null) return `- ${includeUnit && u ? u : ''}`.trim(); 
             const s = v < 0 ? '-' : ''; 
             v = Math.abs(v); 
@@ -695,28 +890,31 @@
             const d = v / 10**(i * 3); 
             return (s + d.toPrecision(p) + (k[i + 5] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); 
         }
-        function drawGrid(p, isSeparate=false, isLast=true){ctx.strokeStyle='#333';ctx.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;ctx.beginPath();ctx.moveTo(x,p.y);ctx.lineTo(x,p.y+p.height);ctx.stroke()} const yDivs = (isSeparate || displayOptions.separateView) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;ctx.beginPath();ctx.moveTo(p.x,y);ctx.lineTo(p.x+p.width,y);ctx.stroke()}}
+        function drawGrid(context, p, colors, isSeparate=false, isLast=true){context.strokeStyle=colors.grid;context.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;context.beginPath();context.moveTo(x,p.y);context.lineTo(x,p.y+p.height);context.stroke()} const yDivs = (isSeparate || (displayOptions.separateView && !getActiveState()?.isOverlap)) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;context.beginPath();context.moveTo(p.x,y);context.lineTo(p.x+p.width,y);context.stroke()}}
         
-        function drawAxisLabels(p, view, state, separateChannelId = null){
-            ctx.fillStyle='#a0a0a0'; 
-            ctx.font='14px Segoe UI'; 
-            ctx.textAlign='center';
-            ctx.textBaseline='top';
+        function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
+            context.fillStyle=colors.text; 
+            context.font='14px Segoe UI'; 
+            context.textAlign='center';
+            context.textBaseline='top';
             if (view && state) { 
+                const timeOffset = state.metadata.timeStart || 0;
                 const timeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
                 if(timeSpan > 0){
-                    const tStart = view.startIndex * state.metadata.timePerPoint;
+                    const tStart = (view.startIndex * state.metadata.timePerPoint) + timeOffset;
                     for(let i=0; i<=X_DIVS; i++){
                         const x = p.x + i/X_DIVS*p.width;
                         const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
-                        if (!separateChannelId || (separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId)) {
-                             ctx.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
+                        const isLastSeparateView = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
+                        if (!displayOptions.separateView || state.isOverlap || isLastSeparateView) {
+                             context.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
                         }
                     }
                 }
             }
-            if (!separateChannelId || (separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId)) {
-                ctx.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+            const isLastSeparateViewForTitle = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
+            if (!displayOptions.separateView || state?.isOverlap || isLastSeparateViewForTitle) {
+                 context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
             }
 
             if (state) {
@@ -724,36 +922,37 @@
                 const yDivs = separateChannelId ? Y_DIVS_SEPARATE : Y_DIVS;
                 visibleChannels.forEach((chId, i) => {
                     const chInfo = state.channelInfo[chId];
+                    if (!chInfo) return;
                     const vRange = chInfo.vMax - chInfo.vMin;
                     const axisWidth = (displayOptions.separateView && !state.isOverlap) ? Y_AXIS_WIDTH_SEPARATE : Y_AXIS_WIDTH;
                     const axisX = p.x - (i * axisWidth) - 10;
-                    ctx.fillStyle = chInfo.color;
-                    ctx.textAlign = 'right';
-                    ctx.textBaseline = 'middle';
+                    context.fillStyle = colors.bwTraces ? colors.text : chInfo.color;
+                    context.textAlign = 'right';
+                    context.textBaseline = 'middle';
                     if (vRange > 0) {
                         for(let j=0; j<=yDivs; j++){
                             const y = p.y + j/yDivs*p.height;
                             const v = chInfo.vMax - j/yDivs*vRange;
-                            ctx.fillText(formatEng(v, '', 3, false), axisX, y);
+                            context.fillText(formatEng(v, '', 3, false), axisX, y);
                         }
                     }
                 });
 
-                ctx.save();
-                ctx.fillStyle = '#a0a0a0';
-                ctx.font = '16px Segoe UI';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.translate(20, p.y + p.height / 2);
-                ctx.rotate(-Math.PI / 2);
+                context.save();
+                context.fillStyle = colors.text;
+                context.font = '16px Segoe UI';
+                context.textAlign = 'center';
+                context.textBaseline = 'middle';
+                context.translate(20, p.y + p.height / 2);
+                context.rotate(-Math.PI / 2);
                 const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
                 const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
-                ctx.fillText(`Voltage (${unit})`, 0, 0);
-                ctx.restore();
+                context.fillText(`Voltage (${unit})`, 0, 0);
+                context.restore();
             }
         }
 
-        function drawWaveform(state, ch, p) {
+        function drawWaveform(context, state, ch, p, colors) {
             const voltageData = state.waveforms[ch];
             const chInfo = state.channelInfo[ch];
             const vRange = chInfo.vMax - chInfo.vMin;
@@ -761,17 +960,25 @@
 
             const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
             const dataNumPoints = chInfo.originalMetadata ? chInfo.originalMetadata.numPoints : state.metadata.numPoints;
-            const viewStartTime = state.view.startIndex * state.metadata.timePerPoint;
-            const viewEndTime = state.view.endIndex * state.metadata.timePerPoint;
+            const timeOffset = state.metadata.timeStart || 0;
+            const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint) + timeOffset;
+            const viewEndTime = (state.view.endIndex * state.metadata.timePerPoint) + timeOffset;
             const viewTimeSpan = viewEndTime - viewStartTime;
             if (viewTimeSpan <= 0) return;
 
-            ctx.strokeStyle = chInfo.color;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
+            let traceColor = chInfo.color;
+            if(colors.bwTraces) {
+                const visibleChannels = getVisibleChannels(state);
+                const colorIndex = visibleChannels.indexOf(ch);
+                traceColor = colors.bwTraces[colorIndex % colors.bwTraces.length];
+            }
+
+            context.strokeStyle = traceColor;
+            context.lineWidth = 1.5;
+            context.beginPath();
             
-            const startIndex = Math.max(0, Math.floor(viewStartTime / dataTimePerPoint));
-            const endIndex = Math.min(dataNumPoints, Math.ceil(viewEndTime / dataTimePerPoint));
+            const startIndex = Math.max(0, Math.floor((viewStartTime - timeOffset) / dataTimePerPoint));
+            const endIndex = Math.min(dataNumPoints, Math.ceil((viewEndTime - timeOffset) / dataTimePerPoint));
             const pointsInView = endIndex - startIndex;
             if (pointsInView <= 1) return;
 
@@ -780,8 +987,8 @@
                  for (let i = 0; i < p.width; i++) {
                     const tStart = viewStartTime + i * timeStepPerPixel;
                     const tEnd = tStart + timeStepPerPixel;
-                    const idxStart = Math.max(startIndex, Math.floor(tStart / dataTimePerPoint));
-                    const idxEnd = Math.min(endIndex, Math.ceil(tEnd / dataTimePerPoint));
+                    const idxStart = Math.max(startIndex, Math.floor((tStart - timeOffset) / dataTimePerPoint));
+                    const idxEnd = Math.min(endIndex, Math.ceil((tEnd - timeOffset) / dataTimePerPoint));
                     if (idxStart >= idxEnd) continue;
                     let min = Infinity, max = -Infinity;
                     for (let j = idxStart; j < idxEnd; j++) {
@@ -794,85 +1001,143 @@
                     const y_min_px = p.y + ((chInfo.vMax - min) / vRange) * p.height;
                     const y_max_px = p.y + ((chInfo.vMax - max) / vRange) * p.height;
                     
-                    if (i === 0) ctx.moveTo(x_px, y_max_px);
-                    ctx.lineTo(x_px, y_max_px);
-                    ctx.lineTo(x_px, y_min_px);
+                    if (i === 0) context.moveTo(x_px, y_max_px);
+                    context.lineTo(x_px, y_max_px);
+                    context.lineTo(x_px, y_min_px);
                 }
             } else { // Direct drawing
                 for (let i = startIndex; i < endIndex; i++) {
-                    const dataTime = i * dataTimePerPoint;
+                    const dataTime = (i * dataTimePerPoint) + timeOffset;
                     const voltage = voltageData[i];
                     const x_px = p.x + ((dataTime - viewStartTime) / viewTimeSpan) * p.width;
                     const y_px = p.y + ((chInfo.vMax - voltage) / vRange) * p.height;
-                    if (i === startIndex) ctx.moveTo(x_px, y_px);
-                    else ctx.lineTo(x_px, y_px);
+                    if (i === startIndex) context.moveTo(x_px, y_px);
+                    else context.lineTo(x_px, y_px);
                 }
             }
-            ctx.stroke();
+            context.stroke();
         }
 
-        function drawPlaceholder(p){ctx.fillStyle='#aaa';ctx.font='18px sans-serif';ctx.textAlign='center';ctx.fillText('No waveform loaded',p.x+p.width/2,p.y+p.height/2);ctx.fillText('Click "Load WFM File" or drop file here',p.x+p.width/2,p.y+p.height/2+30)}
+        function drawPlaceholder(context, p, colors){context.fillStyle=colors.text;context.font='18px sans-serif';context.textAlign='center';context.fillText('No waveform loaded',p.x+p.width/2,p.y+p.height/2);context.fillText('Click "Load File", drop a file, or paste data (Ctrl+V)',p.x+p.width/2,p.y+p.height/2+30)}
         function drawDragRectangle(){ctx.fillStyle='rgba(0,120,215,0.3)';ctx.strokeStyle='#0078d7';ctx.lineWidth=1;const x=Math.min(dragStart.x,dragEnd.x),y=Math.min(dragStart.y,dragEnd.y),w=Math.abs(dragStart.x-dragEnd.x),h=Math.abs(dragStart.y-dragEnd.y);ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h)}
-        function drawStatsTable(context, state, options) { const { x, y, isExport, colors } = options; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0 || state.isOverlap) return { width: 0, height: 0 }; const activeMeasures = {}; if (isExport) { activeMeasures.max = true; activeMeasures.min = true; activeMeasures.avg = true; activeMeasures.rms = true; } else { activeMeasures.max = document.getElementById('showMaxCheckbox').checked; activeMeasures.min = document.getElementById('showMinCheckbox').checked; activeMeasures.avg = document.getElementById('showAvgCheckbox').checked; activeMeasures.rms = document.getElementById('showRmsCheckbox').checked; } const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return { width: 0, height: 0 }; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = isExport ? '10pt Consolas, monospace' : '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = isExport ? 8 : 10; const lineHeight = isExport ? 20 : 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + (isExport ? 0 : cellPadding); if (!x && !y) return { width: tableWidth, height: tableHeight }; context.fillStyle = colors.bg; context.fillRect(x, y, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(x, y, tableWidth, tableHeight); let currentY = y + lineHeight / 2 + (isExport ? 0 : cellPadding/2); rows.forEach((rowKey, rowIndex) => { let currentX = x; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.trace1 ? (chIndex === 0 ? colors.trace1 : colors.trace2) : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = x + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, y); context.lineTo(currentX, y + tableHeight); context.stroke(); currentX += colWidths[i]; } return { width: tableWidth, height: tableHeight }; }
-        function drawStats(plotArea, state) { if (!state || Object.keys(state.waveforms).length === 0) return; drawStatsTable(ctx, state, { x: plotArea.x + 10, y: plotArea.y + 10, isExport: false, colors: { bg: 'rgba(0, 0, 0, 0.6)', grid: '#555555', text: '#fff' } }); }
-        function drawCursors(context, plotArea, state) { const { view, cursors } = state; context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = '#f0ad4e'; const refCh = getVisibleChannels(state)[0] || Object.keys(state.channelInfo)[0]; const x1_s = dataToScreen({time: cursors.x1, voltage: 0}, view, state, refCh, plotArea).x, x2_s = dataToScreen({time: cursors.x2, voltage: 0}, view, state, refCh, plotArea).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = '#32f0ad'; const y1_s = dataToScreen({time: 0, voltage: cursors.y1}, view, state, refCh, plotArea).y, y2_s = dataToScreen({time: 0, voltage: cursors.y2}, view, state, refCh, plotArea).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(state); }
-        function drawAnnotations(context, targetView, plotArea, state, annotations) { 
-            if (!state.annotationsVisible) return;
+        function drawStats(context, plotArea, state, colors) { if (!state || Object.keys(state.waveforms).length === 0) return; const visibleChannels = getVisibleChannels(state); if (visibleChannels.length === 0 || state.isOverlap) return; const activeMeasures = { max: document.getElementById('showMaxCheckbox').checked, min: document.getElementById('showMinCheckbox').checked, avg: document.getElementById('showAvgCheckbox').checked, rms: document.getElementById('showRmsCheckbox').checked }; const measureOrder = ['max', 'min', 'avg', 'rms']; const measureLabels = { max: 'Max', min: 'Min', avg: 'Avg', rms: 'RMS' }; const rows = measureOrder.filter(m => activeMeasures[m]); if (rows.length === 0) return; const allStats = {}; visibleChannels.forEach(ch => { allStats[ch] = calculateStats(state, ch); }); context.font = '13px Consolas, monospace'; context.textBaseline = 'middle'; const rowHeaders = rows.map(r => measureLabels[r]); const cellPadding = 10, lineHeight = 22; const colWidths = [0, ...visibleChannels.map(() => 0)]; colWidths[0] = Math.max(...rowHeaders.map(h => context.measureText(h).width)); rows.forEach(rowKey => { visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); colWidths[chIndex + 1] = Math.max(colWidths[chIndex + 1], context.measureText(text).width); }); }); for (let i = 0; i < colWidths.length; i++) { colWidths[i] += cellPadding * 2; } const tableWidth = colWidths.reduce((a, b) => a + b, 0); const tableHeight = rows.length * lineHeight + cellPadding; context.fillStyle = colors.statsBg || 'rgba(0,0,0,0.6)'; context.fillRect(plotArea.x + 10, plotArea.y + 10, tableWidth, tableHeight); context.strokeStyle = colors.grid; context.lineWidth = 1; context.strokeRect(plotArea.x + 10, plotArea.y + 10, tableWidth, tableHeight); let currentY = plotArea.y + 10 + lineHeight / 2 + cellPadding/2; rows.forEach((rowKey, rowIndex) => { let currentX = plotArea.x + 10; context.fillStyle = colors.text; context.textAlign = 'left'; context.fillText(rowHeaders[rowIndex], currentX + cellPadding, currentY); currentX += colWidths[0]; context.textAlign = 'right'; visibleChannels.forEach((ch, chIndex) => { const text = formatEng(allStats[ch][rowKey], state.channelInfo[ch].units, 3); context.fillStyle = colors.bwTraces ? colors.bwTraces[chIndex % colors.bwTraces.length] : state.channelInfo[ch].color; context.fillText(text, currentX + colWidths[chIndex + 1] - cellPadding, currentY); currentX += colWidths[chIndex + 1]; }); currentY += lineHeight; }); let currentX = plotArea.x + 10 + colWidths[0]; for(let i = 1; i < colWidths.length; i++) { context.beginPath(); context.moveTo(currentX, plotArea.y + 10); context.lineTo(currentX, plotArea.y + 10 + tableHeight); context.stroke(); currentX += colWidths[i]; } }
+        function drawCursors(context, plotArea, state, colors) { const { view, cursors } = state; context.save(); context.setLineDash([6, 4]); context.lineWidth = 1.5; context.strokeStyle = colors.cursorTime; const refCh = getVisibleChannels(state)[0] || Object.keys(state.channelInfo)[0]; if(!refCh) { context.restore(); return; } const x1_s = dataToScreen({time: cursors.x1, voltage: 0}, view, state, refCh, plotArea).x, x2_s = dataToScreen({time: cursors.x2, voltage: 0}, view, state, refCh, plotArea).x; if (x1_s >= plotArea.x && x1_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x1_s, plotArea.y); context.lineTo(x1_s, plotArea.y + plotArea.height); context.stroke(); } if (x2_s >= plotArea.x && x2_s <= plotArea.x + plotArea.width) { context.beginPath(); context.moveTo(x2_s, plotArea.y); context.lineTo(x2_s, plotArea.y + plotArea.height); context.stroke(); } context.strokeStyle = colors.cursorVolt; const y1_s = dataToScreen({time: 0, voltage: cursors.y1}, view, state, refCh, plotArea).y, y2_s = dataToScreen({time: 0, voltage: cursors.y2}, view, state, refCh, plotArea).y; if (y1_s >= plotArea.y && y1_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y1_s); context.lineTo(plotArea.x + plotArea.width, y1_s); context.stroke(); } if (y2_s >= plotArea.y && y2_s <= plotArea.y + plotArea.height) { context.beginPath(); context.moveTo(plotArea.x, y2_s); context.lineTo(plotArea.x + plotArea.width, y2_s); context.stroke(); } context.restore(); if(context === ctx) updateCursorReadouts(state); }
+        function drawAnnotations(context, targetView, plotArea, state, colors) { 
+            if (!state.annotationsVisible || !state.annotations) return;
             const handleSize = 8;
             const refCh = getVisibleChannels(state)[0]; 
             if(!refCh) return; 
-            annotations.forEach((box, index) => { 
+            state.annotations.forEach((box, index) => { 
                 const boxChannelId = box.channel || refCh;
                 const chInfo = state.channelInfo[boxChannelId];
                 if (!chInfo) return;
 
-                // Use the reference channel just for screen positioning
-                const p1_screen = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, refCh, plotArea); 
-                const p2_screen = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, refCh, plotArea); 
-
-                // For the drawing, convert the stored data points using the annotation's own channel context
                 const p1 = dataToScreen({time: box.t1, voltage: box.v1}, targetView, state, boxChannelId, plotArea);
                 const p2 = dataToScreen({time: box.t2, voltage: box.v2}, targetView, state, boxChannelId, plotArea);
-
-                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y); 
-                const w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); 
+                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y); 
 
                 const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index; 
-                context.strokeStyle = isSelected ? '#ffffff' : chInfo.color; 
-                context.fillStyle = hexToRgba(chInfo.color, 0.08); 
+                let traceColor = chInfo.color;
+                if(colors.bwTraces) {
+                    const visibleChannels = getVisibleChannels(state);
+                    const colorIndex = visibleChannels.indexOf(boxChannelId);
+                    traceColor = colorIndex > -1 ? colors.bwTraces[colorIndex % colors.bwTraces.length] : colors.text;
+                }
+                
+                context.strokeStyle = isSelected ? colors.selection : traceColor; 
+                context.fillStyle = hexToRgba(traceColor, 0.08); 
                 context.lineWidth = isSelected ? 2 : 1; 
                 context.fillRect(x, y, w, h); 
                 context.strokeRect(x, y, w, h); 
 
-                const dt = Math.abs(box.t2 - box.t1), dV = Math.abs(box.v2 - box.v1), freq = dt > 0 ? 1/dt : 0;
-                const text1 = `Δt: ${formatEng(dt, 's')}`;
-                const text2 = `1/Δt: ${formatEng(freq, 'Hz')}`;
-                const text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
-                
-                context.font = '12px Segoe UI';
-                const textWidth = Math.max(context.measureText(text1).width, context.measureText(text2).width, context.measureText(text3).width);
-                
-                const placeTextOutside = (y - 50 < plotArea.y);
-                let textY;
-                if (placeTextOutside) { textY = y + h + 5; } else { textY = y - 55; }
-                
-                context.fillStyle = hexToRgba(chInfo.color, 0.2);
-                context.fillRect(x, textY, textWidth + 10, 50);
-
-                context.fillStyle = chInfo.color;
-                context.font = '12px Segoe UI';
-                context.textAlign = 'left'; 
-                context.textBaseline = 'top';
-                context.fillText(text1, x + 5, textY + 4); 
-                context.fillText(text2, x + 5, textY + 19); 
-                context.fillText(text3, x + 5, textY + 34); 
+                if(box.text) {
+                    context.font = '14px Segoe UI';
+                    const textWidth = context.measureText(box.text).width;
+                    context.fillStyle = colors.statsBg || 'rgba(0,0,0,0.6)';
+                    context.fillRect(x, y - 22, textWidth + 10, 22);
+                    context.fillStyle = isSelected ? colors.selection : traceColor;
+                    context.textAlign = 'left';
+                    context.textBaseline = 'middle';
+                    context.fillText(box.text, x + 5, y - 11);
+                }
 
                 if(isSelected && context === ctx){ context.fillStyle = '#ffffff'; context.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize); context.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize); context.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize); } }); 
         }
-        function drawTextAnnotations(context, targetView, plotArea, state, textAnnotations) { 
-            if (!state.annotationsVisible) return;
-            const refCh = getVisibleChannels(state)[0]; if(!refCh) return; textAnnotations.forEach((ann, index) => { const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, refCh, plotArea); const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index; context.font = '14px Segoe UI'; const textWidth = context.measureText(ann.text).width; context.fillStyle = 'rgba(0, 0, 0, 0.6)'; context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22); if (isSelected && context === ctx) { context.strokeStyle = '#00bcf2'; context.lineWidth = 2; context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22); } context.fillStyle = '#f0ad4e'; context.textAlign = 'left'; context.textBaseline = 'middle'; context.fillText(ann.text, pos.x + 5, pos.y - 7); }); }
+        function drawTextAnnotations(context, targetView, plotArea, state, colors) { 
+            if (!state.annotationsVisible || !state.textAnnotations) return;
+            state.textAnnotations.forEach((ann, index) => {
+                const annChannel = ann.channel || getVisibleChannels(state)[0];
+                if(!annChannel) return;
+                let traceColor = state.channelInfo[annChannel] ? state.channelInfo[annChannel].color : colors.text;
+                 if(colors.bwTraces) {
+                    const visibleChannels = getVisibleChannels(state);
+                    const colorIndex = visibleChannels.indexOf(annChannel);
+                    traceColor = colorIndex > -1 ? colors.bwTraces[colorIndex % colors.bwTraces.length] : colors.text;
+                }
+                
+                const pos = dataToScreen({time: ann.time, voltage: ann.voltage}, targetView, state, annChannel, plotArea);
+                const isSelected = activeInteraction.type === 'textAnnotation' && activeInteraction.index === index;
+                context.font = '14px Segoe UI';
+                const textWidth = context.measureText(ann.text).width;
+                context.fillStyle = colors.statsBg || 'rgba(0,0,0,0.6)';
+                context.fillRect(pos.x, pos.y - 18, textWidth + 10, 22);
+                if (isSelected && context === ctx) {
+                    context.strokeStyle = colors.selection;
+                    context.lineWidth = 2;
+                    context.strokeRect(pos.x, pos.y - 18, textWidth + 10, 22);
+                }
+                context.fillStyle = traceColor;
+                context.textAlign = 'left';
+                context.textBaseline = 'middle';
+                context.fillText(ann.text, pos.x + 5, pos.y - 7);
+            });
+        }
+        function drawPointAnnotations(context, targetView, plotArea, state, colors) {
+             if (!state.annotationsVisible || !state.pointAnnotations) return;
+             state.pointAnnotations.forEach((ann, index) => {
+                 const chInfo = state.channelInfo[ann.channel];
+                 if (!chInfo) return;
 
+                 let traceColor = chInfo.color;
+                 if(colors.bwTraces) {
+                    const visibleChannels = getVisibleChannels(state);
+                    const colorIndex = visibleChannels.indexOf(ann.channel);
+                    traceColor = colorIndex > -1 ? colors.bwTraces[colorIndex % colors.bwTraces.length] : colors.text;
+                 }
+                 const isSelected = activeInteraction.type === 'pointAnnotation' && activeInteraction.index === index;
+
+                 const pos = dataToScreen({ time: ann.time, voltage: ann.voltage }, targetView, state, ann.channel, plotArea);
+                 
+                 context.fillStyle = traceColor;
+                 context.beginPath();
+                 context.arc(pos.x, pos.y, isSelected ? 6 : 5, 0, 2 * Math.PI);
+                 context.fill();
+                 if (isSelected) {
+                    context.strokeStyle = colors.selection;
+                    context.lineWidth = 2;
+                    context.stroke();
+                 }
+
+                 const textX = pos.x + ann.textPos.dx;
+                 const textY = pos.y + ann.textPos.dy;
+                 context.font = '14px Segoe UI';
+                 const textWidth = context.measureText(ann.text).width;
+                 
+                 context.beginPath();
+                 context.moveTo(pos.x, pos.y);
+                 context.lineTo(textX, textY);
+                 context.strokeStyle = traceColor;
+                 context.lineWidth = 1;
+                 context.stroke();
+
+                 context.fillStyle = colors.statsBg || 'rgba(0,0,0,0.6)';
+                 context.fillRect(textX, textY - 11, textWidth + 10, 22);
+                 context.fillStyle = traceColor;
+                 context.textAlign = 'left';
+                 context.textBaseline = 'middle';
+                 context.fillText(ann.text, textX + 5, textY);
+             });
+        }
         function snapToCommonScale(value) {
             if (value <= 0) return value;
             const power = Math.pow(10, Math.floor(Math.log10(value)));
@@ -996,7 +1261,8 @@
             }
             
             Object.keys(state.channelInfo).forEach(chId => {
-                const input = document.getElementById(`${chId}_vscale`);
+                const sanitizedChId = chId.replace(/[^a-zA-Z0-9]/g, '_');
+                const input = document.getElementById(`${sanitizedChId}_vscale`);
                 if (input) {
                     const chInfo = state.channelInfo[chId];
                     const vRange = chInfo.vMax - chInfo.vMin;
@@ -1013,7 +1279,8 @@
                 const chInfo = state.channelInfo[chId];
                 const item = document.createElement('div');
                 item.className = 'control-item';
-                item.innerHTML = `<span class="control-label" title="${chInfo.name}">${chInfo.name.substring(0,10)} (${chInfo.units}/div)</span><input type="text" class="control-input" id="${chId}_vscale" data-channel="${chId}">`;
+                const sanitizedChId = chId.replace(/[^a-zA-Z0-9]/g, '_');
+                item.innerHTML = `<span class="control-label" title="${chInfo.name}">${chInfo.name.substring(0,10)} (${chInfo.units}/div)</span><input type="text" class="control-input" id="${sanitizedChId}_vscale" data-channel-id="${chId}">`;
                 container.appendChild(item);
 
                 const input = item.querySelector('input');
@@ -1026,7 +1293,7 @@
                         newVScale = snapToCommonScale(newVScale);
                     }
 
-                    const targetChId = e.target.dataset.channel;
+                    const targetChId = e.target.dataset.channelId;
                     const chInfo = s.channelInfo[targetChId];
 
                     if (!isNaN(newVScale) && newVScale > 0 && chInfo) {
@@ -1036,9 +1303,10 @@
                         chInfo.vMax = vCenter + newVSpan / 2;
                         draw();
                     }
-                    updateControlsFromView(s); // Update input to snapped value
+                    updateControlsFromView(s);
                 });
             });
+            updateControlsFromView(state);
         }
         function updateCursorReadouts(state) { 
             const { cursors } = state;
@@ -1076,156 +1344,84 @@
             return { min, max, avg: sum / count, rms: Math.sqrt(sumSq / count) };
         }
 
-        function handleFileSelect(e) { for (const file of e.target.files) { if(file.name.toLowerCase().endsWith('.wfm')) loadFile(file); } e.target.value = ''; }
+        function handleFileSelect(e) { 
+             for (const file of e.target.files) {
+                 loadFile(file); 
+             }
+             e.target.value = ''; 
+        }
         
-async function loadFile(file) {
-            statusText.textContent=`Loading ${file.name}...`;
+        function loadFile(file) {
+            statusText.textContent = `Loading ${file.name}...`;
             const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const arrayBuffer = e.target.result;
-                    let parser = null;
-                    const view = new DataView(arrayBuffer);
-                    let versionString = '';
-                    if (arrayBuffer.byteLength > 10) {
-                        for (let i = 0; i < 8; i++) {
-                            const charCode = view.getUint8(2 + i);
-                            if (charCode === 0) break;
-                            versionString += String.fromCharCode(charCode);
-                        }
-                    }
-                    
-                    if (versionString.startsWith(':WFM#00')) {
-                        parser = new TekWfmParser(arrayBuffer);
-                    } else if (arrayBuffer.byteLength > 2 && view.getUint16(0, true) === 0xA5A5) {
-                        parser = new RigolWfmParser(arrayBuffer);
-                    } else {
-                        throw new Error("Invalid or unsupported WFM file format.");
-                    }
+            const fileNameLower = file.name.toLowerCase();
 
-                    if (!parser.isValid()) {
-                        throw new Error("Invalid or unsupported WFM file format (parser validation failed).");
-                    }
-                    
-                    // --- MODIFICATION: All scaling multipliers are set to 1 ---
-                    const loadOptions = {
-                        timeMultiplier: 1,
-                        overrides: {}
-                    };
-    
-                    if (parser instanceof RigolWfmParser) {
-                        for (let i = 1; i <= 4; i++) {
-                            if (parser.isChannelWritten(i)) {
-                                const chKey = `channel${i}`;
-                                loadOptions.overrides[chKey] = { multiplier: 1 };
-                            }
-                        }
-                    }
-                    
-                    const newState = createDefaultTabState(file.name, parser, loadOptions.overrides, loadOptions.timeMultiplier);
-                    const newIndex = tabStates.length;
-                    tabStates.push(newState);
-                    addTabToUI(file.name, newIndex);
-                    switchToTab(newIndex);
-                    fitYToAllVisible();
-                    statusText.textContent = `Loaded: ${file.name}`;
-                } catch(err) {
-                    statusText.textContent = `Error processing ${file.name}: ${err.message}`;
-                    console.error(err);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function showLoadOptionsModal(parser, fileName) {
-            const modal = document.getElementById('loadOptionsModal');
-            const infoDiv = document.getElementById('loadOptionsInfo');
-            const channelsDiv = document.getElementById('loadOptionsChannels');
-            document.getElementById('loadOptionsFileName').textContent = fileName;
-            infoDiv.innerHTML = '';
-            channelsDiv.innerHTML = '';
-
-            const globalSettingsBox = document.createElement('div');
-            globalSettingsBox.className = 'load-options-channel-item';
-            globalSettingsBox.style.marginBottom = '15px';
-            globalSettingsBox.innerHTML = '<h4>Global Settings</h4>';
-            
-            const timeItem = document.createElement('div');
-            timeItem.className = 'control-item';
-            timeItem.innerHTML = `<label for="time_multiplier" class="control-label"><b>Time Multiplier:</b></label><input type="number" id="time_multiplier" class="control-input" value="10" style="width:80px;">`;
-            globalSettingsBox.appendChild(timeItem);
-            
-            const fileInfoContainer = document.createElement('div');
-            fileInfoContainer.style.marginTop = '10px';
-            let fileInfoHtml = '';
-
-            if (parser instanceof RigolWfmParser) {
-                fileInfoHtml += `<div><span>Format:</span> <span>Rigol</span></div><div><span>Sample Freq:</span> <span>${formatEng(parser.getSamplingFrequency(), 'Hz')}</span></div>`;
-                for (let i = 1; i <= 4; i++) {
-                    if (parser.isChannelWritten(i)) {
-                        const chKey = `channel${i}`;
-                        const lastMultiplier = lastRigolMultiplier[chKey] || 1000;
-                        channelsDiv.innerHTML += `
-                            <div class="load-options-channel-item">
-                                <h4>Channel ${i} Settings</h4>
-                                <div class="control-item">
-                                    <span class="control-label">Detected V/div:</span>
-                                    <span style="font-family: Consolas;">${formatEng(parser.getVoltageScale(i), 'V')}</span>
-                                </div>
-                                <div class="control-item">
-                                    <span class="control-label">Detected Offset:</span>
-                                    <span style="font-family: Consolas;">${formatEng(parser.getVoltageOffset(i), 'V')}</span>
-                                </div>
-                                <div class="control-item">
-                                    <label for="ch${i}_multiplier" class="control-label"><b>Probe/Scale Multiplier:</b></label>
-                                    <input type="number" id="ch${i}_multiplier" data-channel="${chKey}" class="control-input" value="${lastMultiplier}" style="width:80px;">
-                                </div>
-                            </div>`;
-                    }
-                }
+            if (fileNameLower.endsWith('.wfm')) {
+                reader.onload = (e) => handleWfmLoad(e.target.result, file.name);
+                reader.readAsArrayBuffer(file);
+            } else if (fileNameLower.endsWith('.csv')) {
+                reader.onload = (e) => handleCsvLoad(e.target.result, file.name);
+                reader.readAsText(file);
+            } else if (fileNameLower.endsWith('.graphx')) {
+                reader.onload = (e) => loadSession(e.target.result);
+                reader.readAsText(file);
             } else {
-                 fileInfoHtml += `<div><span>Format:</span> <span>Tektronix</span></div><div><span>User V/div:</span> <span>${formatEng(parser.getUserVoltsPerDiv(), 'V')}</span></div>`;
+                 statusText.textContent = `Unsupported file type: ${file.name}`;
             }
-            fileInfoContainer.innerHTML = fileInfoHtml;
-            globalSettingsBox.appendChild(fileInfoContainer);
-            infoDiv.appendChild(globalSettingsBox);
-            
-            modal.style.display = 'flex';
-
-            return new Promise(resolve => {
-                const confirmBtn = document.getElementById('loadOptionsConfirm');
-                const cancelBtn = document.getElementById('loadOptionsCancel');
-                const closeBtn = modal.querySelector('.modal-close');
-
-                const onConfirm = () => {
-                    const overrides = {};
-                    const multiplierInputs = channelsDiv.querySelectorAll('input[type="number"]');
-                    multiplierInputs.forEach(input => {
-                        const chKey = input.dataset.channel;
-                        const multiplier = parseFloat(input.value) || 1;
-                        overrides[chKey] = { multiplier };
-                        lastRigolMultiplier[chKey] = multiplier;
-                    });
-                    const timeMultiplier = parseFloat(document.getElementById('time_multiplier').value) || 1;
-                    cleanup();
-                    resolve({ overrides, timeMultiplier });
-                };
-
-                const onCancel = () => { cleanup(); resolve(null); };
-                
-                const cleanup = () => {
-                    modal.style.display = 'none';
-                    confirmBtn.removeEventListener('click', onConfirm);
-                    cancelBtn.removeEventListener('click', onCancel);
-                    closeBtn.removeEventListener('click', onCancel);
-                };
-
-                confirmBtn.addEventListener('click', onConfirm);
-                cancelBtn.addEventListener('click', onCancel);
-                closeBtn.addEventListener('click', onCancel);
-            });
+        }
+        
+        function handleCsvLoad(csvText, fileName) {
+            showCsvOptionsModal(csvText, fileName);
         }
 
+        function handleWfmLoad(arrayBuffer, fileName) {
+             try {
+                 let parser = null;
+                 const view = new DataView(arrayBuffer);
+                 let versionString = '';
+                 if (arrayBuffer.byteLength > 10) {
+                     for (let i = 0; i < 8; i++) {
+                         const charCode = view.getUint8(2 + i);
+                         if (charCode === 0) break;
+                         versionString += String.fromCharCode(charCode);
+                     }
+                 }
+                 
+                 if (versionString.startsWith(':WFM#00')) {
+                     parser = new TekWfmParser(arrayBuffer);
+                 } else if (arrayBuffer.byteLength > 2 && view.getUint16(0, true) === 0xA5A5) {
+                     parser = new RigolWfmParser(arrayBuffer);
+                 } else {
+                     throw new Error("Invalid or unsupported WFM file format.");
+                 }
+
+                 if (!parser.isValid()) {
+                     throw new Error("Invalid or unsupported WFM file format (parser validation failed).");
+                 }
+                 
+                 const loadOptions = { timeMultiplier: 1, overrides: {} };
+                 if (parser instanceof RigolWfmParser) {
+                     for (let i = 1; i <= 4; i++) {
+                         if (parser.isChannelWritten(i)) {
+                             const chKey = `channel${i}`;
+                             loadOptions.overrides[chKey] = { multiplier: 1 };
+                         }
+                     }
+                 }
+                 
+                 const newState = createDefaultTabState(fileName, parser, loadOptions.overrides, loadOptions.timeMultiplier);
+                 const newIndex = tabStates.length;
+                 tabStates.push(newState);
+                 addTabToUI(fileName, newIndex);
+                 switchToTab(newIndex);
+                 fitYToAllVisible();
+                 statusText.textContent = `Loaded: ${fileName}`;
+             } catch(err) {
+                 statusText.textContent = `Error processing ${fileName}: ${err.message}`;
+                 console.error(err);
+             }
+        }
+        
         function addTabToUI(fileName, index) {
             const tab = document.createElement('div');
             tab.className = 'tab-item';
@@ -1236,7 +1432,7 @@ async function loadFile(file) {
                 if (e.target.classList.contains('tab-close')) { 
                     e.stopPropagation(); 
                     if (tabStates[index] && tabStates[index].isOverlap) {
-                         // The create button is not a checkbox anymore, so no need to sync
+                       // The create button is not a checkbox anymore, so no need to sync
                     }
                     closeTab(index); 
                 } else { 
@@ -1268,10 +1464,10 @@ async function loadFile(file) {
             if (index < 0 || index >= tabStates.length) return;
             tabStates.splice(index, 1);
             
-            tabContainer.innerHTML = ''; // Clear all tabs
-            // Re-add the overlap button first
-            tabContainer.appendChild(document.getElementById('createOverlapBtn'));
-            // Rebuild all tabs from the modified state array
+            // Rebuild UI for tabs
+            const overlapBtn = document.getElementById('createOverlapBtn');
+            tabContainer.innerHTML = '';
+            tabContainer.appendChild(overlapBtn);
             tabStates.forEach((state, i) => addTabToUI(state.fileName, i));
             
             let newActiveIndex = activeTabIndex;
@@ -1288,7 +1484,6 @@ async function loadFile(file) {
             const fileDetailsPanel = document.getElementById('fileDetailsPanel');
             const annotationSelector = document.getElementById('annotationChannelSelector');
 
-            updateChannelScaleControls(state);
             if (!state) {
                 document.getElementById('fileInfo').innerHTML = `<div>Drop a file or click Load</div><div>Points: -</div>`;
                 ['timeScale', 'deltaX', 'deltaFreq', 'deltaY', 't1', 't2', 'v1', 'v2'].forEach(id => document.getElementById(id).value = '-');
@@ -1299,12 +1494,14 @@ async function loadFile(file) {
                 fileDetailsPanel.style.display = 'none';
                 annotationSelector.style.display = 'none';
                 setupChannelUI(null);
+                updateChannelScaleControls(null);
                 return;
             }
             
             annotationSelector.style.display = (state.drawOrder.length > 0) ? 'flex' : 'none';
             document.getElementById('fileInfo').innerHTML = `<div>${state.fileName}</div><div>Points: ${state.metadata.numPoints}</div>`;
             setupChannelUI(state);
+            updateChannelScaleControls(state);
             document.getElementById('cursorBtn').classList.toggle('active', state.cursors.enabled);
             document.getElementById('cursorPanel').style.display = state.cursors.enabled ? 'block' : 'none';
             if(state.cursors.enabled) updateCursorReadouts(state);
@@ -1313,7 +1510,7 @@ async function loadFile(file) {
             document.getElementById('measurement-controls').style.display = document.getElementById('showStatsCheckbox').checked && !state.isOverlap ? 'block' : 'none';
             updateControlsFromView(state);
 
-            if (state.parser) {
+            if (state.parser && !(state.parser instanceof CsvParser) && !(state.parser instanceof PastedDataParser)) {
                 updateFileDetailsPanel(state.parser);
                 fileDetailsPanel.style.display = 'block';
             } else {
@@ -1354,57 +1551,69 @@ async function loadFile(file) {
 
         function setupChannelUI(state) {
             const btnContainer = document.getElementById('channelButtonContainer');
-            const legendContainer = document.getElementById('channelLegendContainer');
             const cursorContainer = document.getElementById('cursorTrackContainer');
             const annotationSelector = document.getElementById('annotationChannelSelector');
 
             btnContainer.innerHTML = '';
-            legendContainer.innerHTML = '';
             cursorContainer.innerHTML = '<label><input type="radio" name="cursorTrack" value="null" checked> None</label>';
             annotationSelector.innerHTML = '';
 
-            if (!state || state.drawOrder.length === 0) return;
+            if (!state || state.drawOrder.length === 0) {
+                document.getElementById('swapOrderBtn').style.display = 'none';
+                return;
+            };
+
+            document.getElementById('swapOrderBtn').style.display = state.isOverlap ? 'none' : 'block';
             
             annotationSelector.innerHTML = '<span style="font-size: 13px; color: #ccc;">Annotate:</span>';
 
-            for (const chId in state.channelInfo) {
+            for (const chId of state.drawOrder) {
                 const info = state.channelInfo[chId];
+                if (!info) continue;
                 
                 const btn = document.createElement('button');
                 btn.className = `channel-button`;
                 btn.classList.toggle('active', info.visible);
                 if(btn.classList.contains('active')) btn.style.background = info.color;
                 btn.dataset.channel = chId;
-                btn.innerHTML = `<span class="ch-name" title="${info.name}"><i class="fas fa-wave-square" style="color: ${info.color}"></i> ${info.name}</span><span class="ch-order"></span>`;
-                btn.addEventListener('click', e => {
-                    if (e.target.closest('.ch-name')) return; // Ignore clicks on the name span for editing
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'ch-name';
+                nameSpan.title = info.name;
+                nameSpan.innerHTML = `<i class="fas fa-wave-square" style="color: ${info.color}"></i> ${info.name}`;
+                btn.appendChild(nameSpan);
+
+                const orderSpan = document.createElement('span');
+                orderSpan.className = 'ch-order';
+                btn.appendChild(orderSpan);
+
+                const colorPicker = document.createElement('input');
+                colorPicker.type = 'color';
+                colorPicker.className = 'ch-color-picker';
+                colorPicker.value = info.color;
+                btn.appendChild(colorPicker);
+
+                colorPicker.addEventListener('input', (e) => {
                     const s = getActiveState(); if (!s) return;
-                    const button = e.currentTarget;
-                    button.classList.toggle('active');
-                    s.channelInfo[chId].visible = button.classList.contains('active');
-                    button.style.background = button.classList.contains('active') ? s.channelInfo[chId].color : '#454545';
+                    s.channelInfo[chId].color = e.target.value;
+                    btn.style.background = s.channelInfo[chId].visible ? e.target.value : '#454545';
+                    nameSpan.querySelector('i').style.color = e.target.value;
                     draw();
                 });
+                
+                btn.addEventListener('click', e => {
+                    if (e.target.type === 'color') return; // Prevent toggle when clicking color picker
+                    const s = getActiveState(); if (!s) return;
+                    const chInfo = s.channelInfo[chId];
+                    chInfo.visible = !chInfo.visible;
+                    btn.classList.toggle('active', chInfo.visible);
+                    btn.style.background = chInfo.visible ? chInfo.color : '#454545';
+                    draw();
+                });
+                colorPicker.addEventListener('click', (e) => e.stopPropagation());
+
                 btnContainer.appendChild(btn);
                 
-                if (state.isOverlap) {
-                    legendContainer.style.display = 'none';
-                    document.getElementById('swapOrderBtn').style.display = 'none';
-                } else {
-                    legendContainer.style.display = 'block';
-                    document.getElementById('swapOrderBtn').style.display = 'block';
-                    const chNum = chId.replace('channel', '');
-                    const legendItem = document.createElement('div');
-                    legendItem.className = 'control-item';
-                    legendItem.innerHTML = `<label for="ch${chNum}NameInput" class="control-label">Ch ${chNum} Legend</label><input type="text" id="ch${chNum}NameInput" value="${info.name}" class="control-input" style="width: 120px; pointer-events: auto; font-family: 'Segoe UI', sans-serif;">`;
-                    legendItem.querySelector('input').addEventListener('input', e => {
-                        const s = getActiveState();
-                        if (s) s.channelInfo[chId].name = e.target.value || `Channel ${chNum}`;
-                        setupChannelUI(s); // Redraw to sync names
-                    });
-                    legendContainer.appendChild(legendItem);
-                }
-
                 const radioLabel = document.createElement('label');
                 radioLabel.innerHTML = `<input type="radio" name="cursorTrack" value="${chId}"> <span title="${info.name}">${info.name.substring(0, 10)}</span>`;
                 radioLabel.querySelector('input').addEventListener('change', e => {
@@ -1425,9 +1634,11 @@ async function loadFile(file) {
             }
             
             if (state.drawOrder.length > 0 && !state.isOverlap) {
-                 document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`).textContent='(Back)';
+                 const firstBtn = document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`);
+                 if(firstBtn) firstBtn.textContent='(Back)';
                  if (state.drawOrder.length > 1) {
-                       document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`).textContent='(Front)';
+                      const lastBtn = document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`);
+                      if(lastBtn) lastBtn.textContent='(Front)';
                  }
             }
             const radioToCheck = cursorContainer.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`);
@@ -1445,12 +1656,13 @@ async function loadFile(file) {
                 if (!chInfo.visible || !state.waveforms[ch]) continue;
 
                 const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
-                const viewStartTime = state.view.startIndex * state.metadata.timePerPoint;
+                const timeOffset = state.metadata.timeStart || 0;
+                const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint) + timeOffset;
                 const viewTimeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
                 
                 const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
                 const timeAtMouse = viewStartTime + ((mouseX - plotArea.x) / plotArea.width) * viewTimeSpan;
-                const dataIndex = Math.round(timeAtMouse / dataTimePerPoint);
+                const dataIndex = Math.round((timeAtMouse - timeOffset) / dataTimePerPoint);
 
                 if (dataIndex >= 0 && dataIndex < state.waveforms[ch].length) {
                     const waveformVoltage = state.waveforms[ch][dataIndex];
@@ -1466,20 +1678,33 @@ async function loadFile(file) {
         }
 
         function getInteractionAtPos(pos, state) {
-            const handleSize = 8, tol = handleSize/2;
+            const handleSize = 8, tol = handleSize / 2 + 2;
             const refCh = getVisibleChannels(state)[0];
 
+            for (let i = state.pointAnnotations.length - 1; i >= 0; i--) {
+                const ann = state.pointAnnotations[i];
+                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, ann.channel);
+                ctx.font = '14px Segoe UI';
+                const textWidth = ctx.measureText(ann.text).width;
+                const textX = screenPos.x + ann.textPos.dx, textY = screenPos.y + ann.textPos.dy;
+                if (pos.x >= textX && pos.x <= textX + textWidth + 10 && pos.y >= textY - 11 && pos.y <= textY + 11) { return { type: 'pointAnnotation', index: i, handle: 'text' }; }
+                if (Math.hypot(pos.x - screenPos.x, pos.y - screenPos.y) < tol + 3) return { type: 'pointAnnotation', index: i, handle: 'body' };
+            }
             for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
                 const ann = state.textAnnotations[i];
-                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, refCh);
+                const annChannel = ann.channel || refCh;
+                if(!annChannel) continue;
+                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, annChannel);
                 ctx.font = '14px Segoe UI';
                 const textWidth = ctx.measureText(ann.text).width;
                 if (pos.x >= screenPos.x && pos.x <= screenPos.x + textWidth + 10 && pos.y >= screenPos.y - 18 && pos.y <= screenPos.y + 4) { return { type: 'textAnnotation', index: i, handle: 'body' }; }
             }
             for (let i = state.annotations.length - 1; i >= 0; i--) {
                 const box = state.annotations[i];
-                const p1 = dataToScreen({time: box.t1, voltage: box.v1}, state.view, state, refCh);
-                const p2 = dataToScreen({time: box.t2, voltage: box.v2}, state.view, state, refCh);
+                const boxCh = box.channel || refCh;
+                if(!boxCh) continue;
+                const p1 = dataToScreen({time: box.t1, voltage: box.v1}, state.view, state, boxCh);
+                const p2 = dataToScreen({time: box.t2, voltage: box.v2}, state.view, state, boxCh);
                 const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y);
                 const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === i;
                 if (isSelected) {
@@ -1491,6 +1716,7 @@ async function loadFile(file) {
                 if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) return { type: 'annotation', index: i, handle: 'body' };
             }
             if (state.cursors.enabled) {
+                if (!refCh) return { type: null };
                 const x1_s = dataToScreen({time: state.cursors.x1, voltage: 0}, state.view, state, refCh).x;
                 const x2_s = dataToScreen({time: state.cursors.x2, voltage: 0}, state.view, state, refCh).x;
                 const y1_s = dataToScreen({time: 0, voltage: state.cursors.y1}, state.view, state, refCh).y;
@@ -1508,6 +1734,7 @@ async function loadFile(file) {
         canvas.addEventListener('mousedown', e => {
             const state = getActiveState(); if (!state) return;
             if (textAnnotationMode) { createTextAnnotationInput(e); return; }
+            if (pointAnnotationMode) { createPointAnnotation(e); return; }
             
             if (e.shiftKey) {
                 activeInteraction = { type: 'measure-drag' };
@@ -1522,6 +1749,10 @@ async function loadFile(file) {
                 const chInfo = state.channelInfo[interaction.channel];
                 activeInteraction.startVMin = chInfo.vMin;
                 activeInteraction.startVMax = chInfo.vMax;
+                isPanning = false;
+            } else if (interaction.type === 'pointAnnotation' && interaction.handle === 'text') {
+                const ann = state.pointAnnotations[interaction.index];
+                activeInteraction.startTextPos = {...ann.textPos};
                 isPanning = false;
             } else if (interaction.type) {
                 isPanning = false;
@@ -1546,7 +1777,7 @@ async function loadFile(file) {
         canvas.addEventListener('mousemove', e => {
             const state = getActiveState(); if (!state) return;
             lastMousePos = {x: e.offsetX, y: e.offsetY};
-            const { type, channel, handle, index, startVMin, startVMax, startY } = activeInteraction;
+            const { type, channel, handle, index, startVMin, startVMax, startY, startX, startTextPos } = activeInteraction;
 
             if (type === 'channel-drag') {
                 const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
@@ -1558,7 +1789,6 @@ async function loadFile(file) {
                 const chInfo = state.channelInfo[channel];
                 chInfo.vMin = startVMin + vDelta;
                 chInfo.vMax = startVMax + vDelta;
-
                 draw();
                 return;
             } else if (type === 'cursor') {
@@ -1566,9 +1796,17 @@ async function loadFile(file) {
                 if (handle.startsWith('x')) { state.cursors[handle] = time; trackCursors(); } else { state.cursors[handle] = voltage; }
                 draw();
                 return;
-            } else if (type === 'textAnnotation') {
+            } else if (type === 'textAnnotation' || (type === 'annotation' && handle === 'body')) {
                  const { time, voltage } = screenToData({ x: e.offsetX, y: e.offsetY }, state.view, state);
                  state.textAnnotations[index].time = time; state.textAnnotations[index].voltage = voltage;
+                 draw();
+                 return;
+            } else if (type === 'pointAnnotation' && handle === 'text') {
+                 const dx = e.offsetX - startX;
+                 const dy = e.offsetY - startY;
+                 const ann = state.pointAnnotations[index];
+                 ann.textPos.dx = startTextPos.dx + dx;
+                 ann.textPos.dy = startTextPos.dy + dy;
                  draw();
                  return;
             } else if (type === 'zoom-drag' || type === 'measure-drag') {
@@ -1587,15 +1825,16 @@ async function loadFile(file) {
                 if (newStart < 0) newStart = 0;
                 state.view.startIndex = newStart; state.view.endIndex = newEnd;
                 
-                if (displayOptions.separateView && panStart.panningChannel) {
+                if (displayOptions.separateView && !state.isOverlap && panStart.panningChannel) {
                     const ch = panStart.panningChannel;
                     if (panStart.vRanges[ch]) {
                         const chInfo = state.channelInfo[ch];
                         const vRange = panStart.vRanges[ch].vMax - panStart.vRanges[ch].vMin;
                         const PADDING = getDynamicPadding(state);
                         const totalPlotHeight = canvas.clientHeight - PADDING.top - PADDING.bottom;
-                        const totalGapHeight = (getVisibleChannels(state).length > 1) ? (getVisibleChannels(state).length - 1) * SEPARATE_VIEW_GAP : 0;
-                        const individualPlotHeight = (totalPlotHeight - totalGapHeight) / getVisibleChannels(state).length;
+                        const visCh = getVisibleChannels(state);
+                        const totalGapHeight = (visCh.length > 1) ? (visCh.length - 1) * SEPARATE_VIEW_GAP : 0;
+                        const individualPlotHeight = (totalPlotHeight - totalGapHeight) / visCh.length;
                         if (individualPlotHeight > 0) {
                             const vPerPixel = vRange / individualPlotHeight;
                             const vDelta = dy * vPerPixel;
@@ -1603,7 +1842,7 @@ async function loadFile(file) {
                             chInfo.vMax = panStart.vRanges[ch].vMax + vDelta;
                         }
                     }
-                } else if (!displayOptions.separateView) {
+                } else if (!displayOptions.separateView || state.isOverlap) {
                     getVisibleChannels(state).forEach((ch) => {
                         if (panStart.vRanges[ch]) {
                             const chInfo = state.channelInfo[ch];
@@ -1627,9 +1866,9 @@ async function loadFile(file) {
                 const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
                 if (zoomModeEnabled) canvas.style.cursor = 'zoom-in';
                 else if (textAnnotationMode) canvas.style.cursor = 'text';
+                else if (pointAnnotationMode) canvas.style.cursor = 'crosshair';
                 else if (interaction.type === 'channel-drag') canvas.style.cursor = 'ns-resize';
-                else if (interaction.type === 'annotation') canvas.style.cursor = interaction.handle === 'body' ? 'move' : 'pointer';
-                else if (interaction.type === 'textAnnotation') canvas.style.cursor = 'move';
+                else if (interaction.type === 'annotation' || interaction.type === 'textAnnotation' || interaction.type === 'pointAnnotation') canvas.style.cursor = interaction.handle === 'body' || interaction.handle === 'text' ? 'move' : 'pointer';
                 else if (interaction.type === 'cursor') canvas.style.cursor = interaction.handle.startsWith('x') ? 'ew-resize' : 'ns-resize';
                 else canvas.style.cursor = 'grab';
             }
@@ -1666,7 +1905,7 @@ async function loadFile(file) {
                     if (annotationCh) {
                         const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, annotationCh);
                         const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, annotationCh);
-                        state.annotations.push({ t1: t_start, v1: v_start, t2: t_end, v2: v_end, channel: annotationCh });
+                        state.annotations.push({ t1: t_start, v1: v_start, t2: t_end, v2: v_end, channel: annotationCh, text: "Measurement" });
                     }
                 }
             }
@@ -1677,7 +1916,20 @@ async function loadFile(file) {
             draw();
         });
         
-        canvas.addEventListener('dblclick', fullResetView);
+        canvas.addEventListener('dblclick', (e) => {
+            const state = getActiveState();
+            if (!state) return;
+            const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+            if (interaction.type === 'textAnnotation') {
+                editTextAnnotation(interaction.index, 'text');
+            } else if (interaction.type === 'pointAnnotation') {
+                editTextAnnotation(interaction.index, 'point');
+            } else if (interaction.type === 'annotation') {
+                editTextAnnotation(interaction.index, 'measure');
+            } else {
+                fullResetView();
+            }
+        });
         
         function getChannelFromMousePosition(pos, state) {
             if (!state) return null;
@@ -1685,7 +1937,7 @@ async function loadFile(file) {
             const { width, height } = canvas.getBoundingClientRect();
             const visibleChannels = getVisibleChannels(state);
             
-            if (displayOptions.separateView) {
+            if (displayOptions.separateView && !state.isOverlap) {
                 if (mouseY < PADDING_STATIC.top || mouseY > height - PADDING_STATIC.bottom || visibleChannels.length === 0) return null;
                 const PADDING = getDynamicPadding(state);
                 const totalPlotHeight = height - PADDING.top - PADDING.bottom;
@@ -1713,7 +1965,7 @@ async function loadFile(file) {
             return null;
         }
 
-        canvas.addEventListener('wheel', e => {
+    canvas.addEventListener('wheel', e => {
             const state = getActiveState(); if (!state) return;
             e.preventDefault();
             
@@ -1723,8 +1975,7 @@ async function loadFile(file) {
                 const chInfo = state.channelInfo[hoveredChannel];
                 let plotArea, mouseYRatio;
 
-                // Determine the correct plot area and mouse Y position as a ratio (0.0 to 1.0)
-                if (displayOptions.separateView) {
+                if (displayOptions.separateView && !state.isOverlap) {
                     const visibleChannels = getVisibleChannels(state);
                     const chIndex = visibleChannels.indexOf(hoveredChannel);
                     if (chIndex === -1) return;
@@ -1746,23 +1997,21 @@ async function loadFile(file) {
                     mouseYRatio = Math.max(0, Math.min(1, (e.offsetY - plotArea.y) / plotArea.height));
                 }
 
-                // The voltage value at the mouse pointer's location, which will be our pivot point
                 const pivotV = chInfo.vMax - (chInfo.vMax - chInfo.vMin) * mouseYRatio;
                 let newVSpan;
 
-                // Calculate the new vertical span based on zoom direction and whether snapping is enabled
                 if (displayOptions.discreteZoom) {
-                    const vScale = (chInfo.vMax - chInfo.vMin) / Y_DIVS;
+                    const yDivs = (displayOptions.separateView && !state.isOverlap) ? Y_DIVS_SEPARATE : Y_DIVS;
+                    const vScale = (chInfo.vMax - chInfo.vMin) / yDivs;
                     const newSnappedVScale = getNextSnapScale(vScale, e.deltaY);
-                    newVSpan = newSnappedVScale * Y_DIVS;
+                    newVSpan = newSnappedVScale * yDivs;
                 } else {
                     const z = e.deltaY < 0 ? 0.85 : 1.15;
                     newVSpan = (chInfo.vMax - chInfo.vMin) * z;
                 }
                 
-                // CORRECTED LOGIC: Recalculate vMax and vMin based on the pivot point
-                chInfo.vMax = pivotV + newVSpan * mouseYRatio;
                 chInfo.vMin = pivotV - newVSpan * (1 - mouseYRatio);
+                chInfo.vMax = pivotV + newVSpan * mouseYRatio;
 
             } else { // X-Axis Zoom/Pan
                 if (e.shiftKey) { // Pan
@@ -1790,7 +2039,6 @@ async function loadFile(file) {
                 }
             }
 
-            // Ensure view stays within data boundaries
             state.view.startIndex = Math.max(0, state.view.startIndex);
             state.view.endIndex = Math.min(state.metadata.numPoints, state.view.endIndex);
             if (state.view.endIndex - state.view.startIndex < 10) { 
@@ -1804,7 +2052,7 @@ async function loadFile(file) {
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => document.body.addEventListener(eventName, e => e.preventDefault()));
         ['dragenter', 'dragover'].forEach(eventName => document.body.addEventListener(eventName, () => { if (!isDraggingFile) { dragOverlay.style.display = 'flex'; isDraggingFile = true; } }));
         document.body.addEventListener('dragleave', (e) => { if (e.relatedTarget === null) { dragOverlay.style.display = 'none'; isDraggingFile = false; }});
-        document.body.addEventListener('drop', e => { dragOverlay.style.display = 'none'; isDraggingFile = false; for (const file of e.dataTransfer.files) { if(file.name.toLowerCase().endsWith('.wfm')) loadFile(file); } });
+        document.body.addEventListener('drop', e => { dragOverlay.style.display = 'none'; isDraggingFile = false; for (const file of e.dataTransfer.files) { loadFile(file); } });
         
         document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
         document.getElementById('fileInput').addEventListener('change', handleFileSelect);
@@ -1834,8 +2082,8 @@ async function loadFile(file) {
         });
 
         document.getElementById('cursorBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.cursors.enabled = !s.cursors.enabled; document.getElementById('cursorBtn').classList.toggle('active'); document.getElementById('cursorPanel').style.display = s.cursors.enabled ? 'block' : 'none'; if (s.cursors.enabled && s.cursors.x1 === null) { const spanT = (s.view.endIndex - s.view.startIndex) * s.metadata.timePerPoint; const startTime = s.view.startIndex * s.metadata.timePerPoint; const firstCh = getVisibleChannels(s)[0]; if(firstCh){const chInfo=s.channelInfo[firstCh]; const spanV=chInfo.vMax-chInfo.vMin; s.cursors.y1=chInfo.vMin+spanV*0.25; s.cursors.y2=chInfo.vMin+spanV*0.75;} s.cursors.x1=startTime+spanT*0.25; s.cursors.x2=startTime+spanT*0.75; trackCursors();} draw(); });
-        document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
-        document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; activeInteraction = {type: null}; draw(); });
+        document.getElementById('annotateBtn').addEventListener('click', (e) => { const s=getActiveState(); if(!s) return; s.annotationMode = !s.annotationMode; textAnnotationMode = false; pointAnnotationMode = false; canvas.style.cursor = 'crosshair'; e.currentTarget.classList.toggle('active', s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = s.annotationMode ? 'flex' : 'none'; });
+        document.getElementById('clearAnnotationsBtn').addEventListener('click', () => { const s=getActiveState(); if(!s) return; s.annotations = []; s.textAnnotations = []; s.pointAnnotations = []; activeInteraction = {type: null}; draw(); });
         
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT') return;
@@ -1845,7 +2093,7 @@ async function loadFile(file) {
                     const hoveredChannel = getChannelFromMousePosition(lastMousePos, state);
                     if (hoveredChannel) {
                         fitYToChannel(hoveredChannel);
-                    } else if (!displayOptions.separateView) {
+                    } else if (!displayOptions.separateView || state.isOverlap) {
                         fitYToAllVisible();
                     }
                 }
@@ -1868,14 +2116,16 @@ async function loadFile(file) {
                 }
             }
 
-            if (e.key === 'Delete' && activeInteraction.type && activeInteraction.index > -1) { if(!state) return; if (activeInteraction.type === 'annotation') { state.annotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'textAnnotation') { state.textAnnotations.splice(activeInteraction.index, 1); } activeInteraction = {type: null}; draw(); }
+            if (e.key === 'Delete' && activeInteraction.type && activeInteraction.index > -1) { if(!state) return; if (activeInteraction.type === 'annotation') { state.annotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'textAnnotation') { state.textAnnotations.splice(activeInteraction.index, 1); } else if (activeInteraction.type === 'pointAnnotation') { state.pointAnnotations.splice(activeInteraction.index, 1); } activeInteraction = {type: null}; draw(); }
             if (e.key.toLowerCase() === 't') { toggleTextAnnotationMode(); }
+            if (e.key.toLowerCase() === 'p') { togglePointAnnotationMode(); }
             if (e.key.toLowerCase() === 'z') { if (state && !textAnnotationMode) { zoomModeEnabled = true; canvas.style.cursor = 'zoom-in'; statusText.textContent = 'Zoom Mode: Click and drag on the chart to zoom into an area.'; } }
             if (e.key === 'Escape') {
                 if (textAnnotationMode) toggleTextAnnotationMode();
+                if (pointAnnotationMode) togglePointAnnotationMode();
                 if (zoomModeEnabled) {
                     zoomModeEnabled = false; canvas.style.cursor = 'grab';
-                    if (state) statusText.textContent = `Loaded: ${state.fileName}`; else statusText.textContent = 'Ready to load WFM file';
+                    if (state) statusText.textContent = `Loaded: ${state.fileName}`; else statusText.textContent = 'Ready to load file';
                 }
             }
         });
@@ -1885,8 +2135,76 @@ async function loadFile(file) {
         function trackCursors() { const s = getActiveState(); if (!s || !s.cursors.trackingChannel || !s.waveforms[s.cursors.trackingChannel]) return; const data = s.waveforms[s.cursors.trackingChannel]; const i1 = Math.round(s.cursors.x1 / s.metadata.timePerPoint); if(data[i1] !== undefined) s.cursors.y1 = data[i1]; const i2 = Math.round(s.cursors.x2 / s.metadata.timePerPoint); if(data[i2] !== undefined) s.cursors.y2 = data[i2]; }
         function findViewExtrema(channels) { const s = getActiveState(); if (!s) return null; let viewMin = { val: Infinity, time: -1, ch: null }, viewMax = { val: -Infinity, time: -1, ch: null }; const start = Math.floor(s.view.startIndex), end = Math.ceil(s.view.endIndex); channels.forEach(ch => { const data = s.waveforms[ch]; for (let i = start; i < end; i++) { const val = data[i]; if (val < viewMin.val) { viewMin = { val, time: i * s.metadata.timePerPoint, ch }; } if (val > viewMax.val) { viewMax = { val, time: i * s.metadata.timePerPoint, ch }; } } }); return { min: viewMin, max: viewMax }; }
         function setCursorsToExtrema(type) { const s = getActiveState(); if (!s) return; const visibleChannels = getVisibleChannels(s); if (visibleChannels.length === 0) return; const extrema = findViewExtrema(visibleChannels); if(type === 'max' && extrema.max.time !== -1) { s.cursors.x1 = extrema.max.time; s.cursors.y1 = extrema.max.val; } else if (type === 'min' && extrema.min.time !== -1) { s.cursors.x2 = extrema.min.time; s.cursors.y2 = extrema.min.val; } updateCursorReadouts(s); draw(); }
-        function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode && s.annotationMode) s.annotationMode = false; canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
-        function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
+        function toggleTextAnnotationMode() { const s = getActiveState(); if(!s) return; textAnnotationMode = !textAnnotationMode; if(textAnnotationMode) { s.annotationMode = false; pointAnnotationMode = false; } canvas.style.cursor = textAnnotationMode ? 'text' : 'grab'; document.getElementById('annotateBtn').classList.toggle('active', textAnnotationMode || s.annotationMode); document.getElementById('clearAnnotationsBtn').style.display = (textAnnotationMode || s.annotationMode) ? 'flex' : 'none'; }
+        function togglePointAnnotationMode() { const s = getActiveState(); if(!s) return; pointAnnotationMode = !pointAnnotationMode; if(pointAnnotationMode) { s.annotationMode = false; textAnnotationMode = false; } canvas.style.cursor = pointAnnotationMode ? 'crosshair' : 'grab'; document.getElementById('annotateBtn').classList.remove('active'); document.getElementById('clearAnnotationsBtn').style.display = 'none'; }
+        function createTextAnnotationInput(e) { let existingInput = document.getElementById('text-annotation-input'); if(existingInput) existingInput.remove(); const s = getActiveState(); const { time, voltage } = screenToData({x: e.offsetX, y: e.offsetY}, s.view, s); const input = document.createElement('input'); input.type = 'text'; input.id = 'text-annotation-input'; input.style.left = `${e.clientX}px`; input.style.top = `${e.clientY}px`; document.body.appendChild(input); input.focus(); input.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') { if(input.value) { s.textAnnotations.push({ time, voltage, text: input.value, channel: s.annotationChannel }); } input.remove(); toggleTextAnnotationMode(); draw(); } else if (ev.key === 'Escape') { input.remove(); toggleTextAnnotationMode(); } }); }
+        function createPointAnnotation(e) {
+            const state = getActiveState();
+            const mousePos = { x: e.offsetX, y: e.offsetY };
+            const targetChannel = hitTestWaveform(mousePos, state);
+            if (targetChannel) {
+                const plotArea = getPlotArea(canvas.clientWidth, canvas.clientHeight, state);
+                const { time } = screenToData(mousePos, state.view, state, targetChannel, plotArea);
+                const dataTimePerPoint = state.channelInfo[targetChannel].originalMetadata?.timePerPoint || state.metadata.timePerPoint;
+                const index = Math.round(time / dataTimePerPoint);
+                const voltage = state.waveforms[targetChannel][index];
+                const preciseTime = index * dataTimePerPoint;
+
+                state.pointAnnotations.push({
+                    time: preciseTime, voltage: voltage, channel: targetChannel,
+                    text: `(${formatEng(preciseTime, '', 3, false)}, ${formatEng(voltage, '', 3, false)})`,
+                    textPos: { dx: 15, dy: -15 },
+                });
+                togglePointAnnotationMode();
+                draw();
+            }
+        }
+        function editTextAnnotation(index, type) {
+            const state = getActiveState();
+            let ann, collection, annChannel, screenPos;
+            if (type === 'text') { collection = state.textAnnotations; } 
+            else if (type === 'point') { collection = state.pointAnnotations; }
+            else if (type === 'measure') { collection = state.annotations; }
+            ann = collection[index];
+            if (!ann) return;
+            annChannel = ann.channel || getVisibleChannels(state)[0];
+            if (!annChannel) return;
+
+            let existingInput = document.getElementById('text-annotation-input');
+            if(existingInput) existingInput.remove();
+
+            if (type === 'measure') {
+                 const p1 = dataToScreen({time: ann.t1, voltage: ann.v1}, state.view, state, annChannel);
+                 const p2 = dataToScreen({time: ann.t2, voltage: ann.v2}, state.view, state, annChannel);
+                 screenPos = { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y)};
+            } else {
+                 screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, annChannel);
+            }
+            
+            const input = document.createElement('input');
+            input.type = 'text'; input.id = 'text-annotation-input'; input.value = ann.text;
+            document.body.appendChild(input);
+
+            if (type === 'point') {
+                 input.style.left = `${canvas.getBoundingClientRect().left + screenPos.x + ann.textPos.dx}px`;
+                 input.style.top = `${canvas.getBoundingClientRect().top + screenPos.y + ann.textPos.dy - 11}px`;
+            } else if (type === 'measure') {
+                input.style.left = `${canvas.getBoundingClientRect().left + screenPos.x}px`;
+                input.style.top = `${canvas.getBoundingClientRect().top + screenPos.y - 22}px`;
+            } else {
+                 input.style.left = `${canvas.getBoundingClientRect().left + screenPos.x}px`;
+                 input.style.top = `${canvas.getBoundingClientRect().top + screenPos.y - 18}px`;
+            }
+            
+            input.focus(); input.select();
+            const finalize = () => {
+                ann.text = input.value.trim();
+                if (!ann.text && type !== 'measure') { collection.splice(index, 1); }
+                input.remove(); activeInteraction = {type: null}; draw();
+            };
+            input.addEventListener('blur', finalize);
+            input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') input.blur(); });
+        }
         
         function setAnnotationChannel(chId) {
             const state = getActiveState();
@@ -1928,7 +2246,7 @@ async function loadFile(file) {
                 channelInfo: {}, drawOrder: [],
                 view: { startIndex: 0, endIndex: Math.ceil(maxTotalTime / baseMetadata.timePerPoint) },
                 cursors: { enabled: false, x1: null, x2: null, y1: null, y2: null, trackingChannel: null },
-                annotations: [], textAnnotations: [], annotationMode: false, annotationsVisible: true,
+                annotations: [], textAnnotations: [], pointAnnotations: [], annotationMode: false, annotationsVisible: true,
             };
             let colorIndex = 0;
             sourceTabs.forEach(sourceState => {
@@ -1938,7 +2256,7 @@ async function loadFile(file) {
                     mergedState.waveforms[newChId] = sourceState.waveforms[chId];
                     mergedState.channelInfo[newChId] = {
                         ...sourceChInfo,
-                        name: `${sourceState.fileName.replace(/\.wfm$/i, '')} - ${sourceChInfo.name}`,
+                        name: `${sourceState.fileName.replace(/\.(wfm|csv)$/i, '')} - ${sourceChInfo.name}`,
                         color: OVERLAP_COLORS[colorIndex % OVERLAP_COLORS.length],
                         originalMetadata: sourceState.metadata,
                     };
@@ -1962,193 +2280,466 @@ async function loadFile(file) {
         }
 
          function setupModals() {
-               const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
-               document.getElementById('aboutBtn').addEventListener('click', () => { 
-                   const date = new Date();
-                   const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                   document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)} (Singapore)`; 
-                   aboutModal.style.display='flex'; 
-               });
-               document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
-               [aboutModal, exportModal].forEach(m => { m.querySelector('.modal-close').addEventListener('click',()=>m.style.display='none'); m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; }); });
-               document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
-                   const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isBW: document.getElementById('bwExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
-                   executeExport(options); exportModal.style.display = 'none'; 
-               });
-          }
-          async function exportToClipboard() {
-                  const state = getActiveState(); if (!state) return;
-                  const isBW = document.getElementById('bwCopyCheckbox').checked;
-                  try {
-                      const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isBW: isBW, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
-                      await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-                      statusText.textContent = 'Copied to clipboard!';
-                      setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
-                  } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
-          }
-          async function executeExport(options) {
-                  const state = getActiveState(); if (!state) return;
-                  const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
-                  const newFilename = `${originalFilename}_export.${options.format}`;
-                  if (options.format === 'csv') {
-                      generateAndDownloadCSV(options);
-                  } else if (options.format === 'svg') {
-                       try {
-                           const svgString = generateSVG(options);
-                           const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                           const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
-                           document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                       } catch(err) { console.error('SVG Export failed:', err); statusText.textContent = 'Error during SVG export.'; }
-                  } else {
-                     try {
-                          const blob = await generateImageBlob(options);
-                          const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = newFilename;
-                          document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                     } catch (err) { console.error('Export failed:', err); statusText.textContent = 'Error during export.'; }
-                  }
-          }
-          function generateImageBlob(options) {
-             return new Promise((resolve, reject) => {
-                 const state = getActiveState(); if (!state) return reject('No active state');
-                 const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
-                 tempCanvas.width = canvas.clientWidth * dpr; tempCanvas.height = canvas.clientHeight * dpr; tempCtx.scale(dpr, dpr);
-                 tempCtx.drawImage(canvas, 0, 0, canvas.clientWidth, canvas.clientHeight);
-                 tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
-               });
-          }
-        
-          function generateAndDownloadCSV(options) {
-            const state = getActiveState();
-            if (!state) { alert("No active waveform to export."); return; }
-            const visibleChannels = getVisibleChannels(state);
-            if (visibleChannels.length === 0) { alert("No visible channels to export."); return; }
-            const startIndex = options.content === 'current' ? Math.floor(state.view.startIndex) : 0;
-            const endIndex = options.content === 'current' ? Math.ceil(state.view.endIndex) : state.metadata.numPoints;
-            const timeStep = state.metadata.timePerPoint;
-            const headers = ['Time (s)'];
-            visibleChannels.forEach(chId => {
-                const chInfo = state.channelInfo[chId];
-                headers.push(`${chInfo.name} (${chInfo.units})`);
-            });
-            let csvString = headers.map(h => `"${h}"`).join(',') + '\r\n';
-            for (let i = startIndex; i < endIndex; i++) {
-                if (i >= 0 && i < state.metadata.numPoints) {
-                    const rowData = [(i * timeStep).toExponential(6)];
-                    visibleChannels.forEach(chId => {
-                        const val = state.waveforms[chId][i];
-                        rowData.push(val !== undefined ? val.toExponential(6) : '');
-                    });
-                    csvString += rowData.map(d => `"${d}"`).join(',') + '\r\n';
+             const aboutModal=document.getElementById('aboutModal'), exportModal=document.getElementById('exportModal'); 
+             document.getElementById('aboutBtn').addEventListener('click', () => { 
+                 const date = new Date();
+                 const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                 document.getElementById('aboutDate').textContent = `Current Time: ${date.toLocaleDateString('en-SG', options)}`; 
+                 aboutModal.style.display='flex'; 
+             });
+             document.getElementById('exportBtn').addEventListener('click', () => { if(getActiveState()) exportModal.style.display='flex'; });
+             [aboutModal, exportModal, csvOptionsModal, pasteModal].forEach(m => { 
+                 if (m) {
+                     const closeBtn = m.querySelector('.modal-close');
+                     const cancelBtn = m.querySelector('.modal-cancel-btn');
+                     if (closeBtn) closeBtn.addEventListener('click',()=>m.style.display='none');
+                     if (cancelBtn) cancelBtn.addEventListener('click', ()=>m.style.display='none');
+                     m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; });
+                 }
+             });
+             document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
+                 const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isWB: document.getElementById('wbExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
+                 executeExport(options); exportModal.style.display = 'none'; 
+             });
+        }
+        async function exportToClipboard() {
+             const state = getActiveState(); if (!state) return;
+             const isWB = document.getElementById('wbCopyCheckbox').checked;
+             try {
+                 const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isWB: isWB, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
+                 await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+                 statusText.textContent = 'Copied to clipboard!';
+                 setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
+             } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
+        }
+        async function executeExport(options) {
+             const state = getActiveState(); if (!state) return;
+             const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+             const newFilename = `${originalFilename}_export.${options.format}`;
+             
+             try {
+                if (options.isIEEE) {
+                    const blob = await generateExportIEEE(options);
+                    downloadBlob(blob, `${originalFilename}_IEEE.png`);
+                } else if (options.format === 'csv') {
+                    generateAndDownloadCSV(options);
+                } else if (options.format === 'svg') {
+                    const svgString = generateExportSVG(options);
+                    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                    downloadBlob(blob, newFilename);
+                } else { // PNG
+                    const blob = await generateImageBlob(options);
+                    downloadBlob(blob, newFilename);
                 }
-            }
-            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-            const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
-            const newFilename = `${originalFilename}_${options.content}.csv`;
-            const link = document.createElement("a");
-            if(link.download !== undefined) {
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", newFilename);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            }
-          }
+             } catch(err) {
+                console.error('Export failed:', err); statusText.textContent = 'Error during export.';
+             }
+        }
+        function downloadBlob(blob, filename) {
+             const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename;
+             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
 
-          function generateSVG(options) {
-                 const state = getActiveState();
-                 if (!state) return '';
-                 const { width, height } = { width: canvas.clientWidth, height: canvas.clientHeight };
-                 const PADDING = getDynamicPadding(state);
-                 const plotArea = getPlotArea(width, height, state);
+        function generateImageBlob(options) {
+             return new Promise((resolve, reject) => {
+                  const state = getActiveState(); if (!state) return reject('No active state');
+                  const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
+                  const w = canvas.clientWidth, h = canvas.clientHeight;
+                  tempCanvas.width = w * dpr; tempCanvas.height = h * dpr;
+                  tempCtx.scale(dpr, dpr);
 
-                 let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">`;
-                 svg += `<defs><clipPath id="clip"><rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" /></clipPath></defs>`;
-                 svg += `<style>.grid{stroke:#333;stroke-width:1}.text{fill:#a0a0a0;font-size:14px;}.title{font-size:16px;}</style>`;
-                 svg += `<rect width="100%" height="100%" fill="#1e1e1e" />`;
-                 
-                 const timeSpan = (state.view.endIndex - state.view.startIndex) * state.metadata.timePerPoint;
-                 const tStart = state.view.startIndex * state.metadata.timePerPoint;
-
-                 for (let i = 0; i <= X_DIVS; i++) {
-                      const x = plotArea.x + i / X_DIVS * plotArea.width;
-                      svg += `<line x1="${x}" y1="${plotArea.y}" x2="${x}" y2="${plotArea.y + plotArea.height}" class="grid" />`;
-                      const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
-                      svg += `<text x="${x}" y="${plotArea.y + plotArea.height + 20}" class="text" text-anchor="middle">${formatEng(timeVal, 's', 3, false)}</text>`;
-                 }
-                 svg += `<text x="${plotArea.x + plotArea.width/2}" y="${plotArea.y + plotArea.height + 50}" class="text title" text-anchor="middle">Time (s)</text>`;
-                 
-                 for (let i = 0; i <= Y_DIVS; i++) {
-                      const y = plotArea.y + i / Y_DIVS * plotArea.height;
-                      svg += `<line x1="${plotArea.x}" y1="${y}" x2="${plotArea.x + plotArea.width}" y2="${y}" class="grid" />`;
-                 }
-
-                 const visibleChannels = getVisibleChannels(state);
-                 visibleChannels.forEach((chId, i) => {
-                      const chInfo = state.channelInfo[chId];
-                      const vRange = chInfo.vMax - chInfo.vMin;
-                      const axisX = plotArea.x - (i * Y_AXIS_WIDTH) - 10;
-                      for (let j = 0; j <= Y_DIVS; j++) {
-                          const y = plotArea.y + j/Y_DIVS*p.height;
-                          const v = chInfo.vMax - j/Y_DIVS*vRange;
-                          svg += `<text x="${axisX}" y="${y}" class="text" fill="${chInfo.color}" text-anchor="end" dominant-baseline="middle">${formatEng(v, '', 3, false)}</text>`;
-                      }
+                  const { isWB, isIEEE } = options;
+                  const colors = {
+                    bg: isWB || isIEEE ? '#FFFFFF' : '#1e1e1e',
+                    grid: isWB || isIEEE ? '#CCCCCC' : '#333',
+                    text: isWB || isIEEE ? '#000000' : '#a0a0a0',
+                    axisBorder: isWB || isIEEE ? '#000000' : '#888',
+                    cursorTime: isWB || isIEEE ? '#555555' : '#f0ad4e',
+                    cursorVolt: isWB || isIEEE ? '#888888' : '#32f0ad',
+                    selection: '#00bcf2',
+                    statsBg: isWB || isIEEE ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+                    bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500']
+                  };
+                  
+                  const tempState = JSON.parse(JSON.stringify(state));
+                  Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
+                  const targetView = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
+                  tempState.view = targetView;
+                  
+                  drawToContext(tempCtx, tempState, colors);
+                  
+                  tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
                  });
+        }
+        
+        function generateAndDownloadCSV(options) {
+           const state = getActiveState();
+           if (!state) { alert("No active waveform to export."); return; }
+           const visibleChannels = getVisibleChannels(state);
+           if (visibleChannels.length === 0) { alert("No visible channels to export."); return; }
+           const startIndex = options.content === 'current' ? Math.floor(state.view.startIndex) : 0;
+           const endIndex = options.content === 'current' ? Math.ceil(state.view.endIndex) : state.metadata.numPoints;
+           const timeStep = state.metadata.timePerPoint;
+           const headers = ['"Time (s)"'];
+           visibleChannels.forEach(chId => {
+               const chInfo = state.channelInfo[chId];
+               headers.push(`"${chInfo.name} (${chInfo.units})"`);
+           });
+           let csvString = headers.join(',') + '\r\n';
+           for (let i = startIndex; i < endIndex; i++) {
+               if (i >= 0 && i < state.metadata.numPoints) {
+                   const rowData = [(i * timeStep).toExponential(6)];
+                   visibleChannels.forEach(chId => {
+                       const val = state.waveforms[chId][i];
+                       rowData.push(val !== undefined ? val.toExponential(6) : '');
+                   });
+                   csvString += rowData.join(',') + '\r\n';
+               }
+           }
+           const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+           const originalFilename = state.fileName.replace(/\.[^/.]+$/, "");
+           const newFilename = `${originalFilename}_${options.content}.csv`;
+           downloadBlob(blob, newFilename);
+        }
 
-                 const firstChannelInfo = visibleChannels.length > 0 ? state.channelInfo[visibleChannels[0]] : null;
-                 const unit = firstChannelInfo ? firstChannelInfo.units : 'V';
-                 svg += `<text transform="translate(20, ${plotArea.y + plotArea.height/2}) rotate(-90)" class="text title" text-anchor="middle">Voltage (${unit})</text>`;
-                 
-                 svg += `<g clip-path="url(#clip)">`;
-                 visibleChannels.forEach(ch => {
-                      const pathData = [];
-                      const voltageData = state.waveforms[ch];
-                      const startIndex = Math.max(0, Math.floor(state.view.startIndex));
-                      const endIndex = Math.min(state.metadata.numPoints, Math.ceil(state.view.endIndex));
-                      for(let i = startIndex; i < endIndex; i++) {
-                          const screenPos = dataToScreen({time: i * state.metadata.timePerPoint, voltage: voltageData[i]}, state.view, state, ch);
-                          pathData.push(`${i === startIndex ? 'M' : 'L'} ${screenPos.x.toFixed(2)} ${screenPos.y.toFixed(2)}`);
-                      }
-                      svg += `<path d="${pathData.join(' ')}" stroke="${state.channelInfo[ch].color}" stroke-width="1.5" fill="none" />`;
-                 });
-                 svg += `</g>`;
+        // SEPARATE EXPORT FUNCTION for SVG
+        function generateExportSVG(options) {
+             const state = getActiveState();
+             if (!state) return '';
+             // This is a placeholder for a more complex SVG generation logic.
+             // It would need to be rewritten to accept color themes like generateImageBlob.
+             alert("SVG export is not fully implemented with new styling options yet.");
+             return `<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><text x="10" y="50">SVG placeholder</text></svg>`;
+        }
 
-                 svg += `<rect x="${plotArea.x}" y="${plotArea.y}" width="${plotArea.width}" height="${plotArea.height}" stroke="#888" fill="none"/>`;
-                 svg += `</svg>`;
-                 return svg;
-          }
+        // SEPARATE EXPORT FUNCTION for IEEE
+        function generateExportIEEE(options) {
+            // This would create a new canvas with specific dimensions, fonts, etc.
+            // and use drawToContext to render the image.
+            alert("IEEE export is not fully implemented yet.");
+            return new Promise(resolve => resolve(new Blob()));
+        }
 
-        document.getElementById('channelButtonContainer').addEventListener('click', (e) => {
+        document.getElementById('channelButtonContainer').addEventListener('dblclick', (e) => {
             const nameSpan = e.target.closest('.ch-name');
             if (!nameSpan || channelButtonContainer.querySelector('input')) return;
+            
             const state = getActiveState();
             if (!state) return;
+            
             const button = nameSpan.closest('.channel-button');
             const chId = button.dataset.channel;
             const originalName = state.channelInfo[chId].name;
-            const icon = nameSpan.querySelector('i');
+            const icon = nameSpan.querySelector('i').cloneNode(true);
+
             const input = document.createElement('input');
             input.type = 'text';
             input.value = originalName;
-            Object.assign(input.style, { width: 'calc(100% - 25px)', backgroundColor: '#333', border: '1px solid #0078d7', color: 'white', padding: '2px', marginLeft: '5px' });
+            Object.assign(input.style, { 
+                width: 'calc(100% - 25px)', 
+                backgroundColor: '#333', 
+                border: '1px solid #0078d7', 
+                color: 'white', 
+                padding: '2px', 
+                marginLeft: '5px' 
+            });
+
             nameSpan.innerHTML = '';
             nameSpan.appendChild(icon);
             nameSpan.appendChild(input);
             input.focus();
             input.select();
+
             const finalizeEdit = () => {
                 const newName = input.value.trim() || originalName;
                 state.channelInfo[chId].name = newName;
                 setupChannelUI(state);
+                updateChannelScaleControls(state);
             };
+
             input.addEventListener('blur', finalizeEdit);
             input.addEventListener('keydown', (ev) => {
-                if (ev.key === 'Enter') finalizeEdit();
-                else if (ev.key === 'Escape') setupChannelUI(state);
+                if (ev.key === 'Enter') input.blur();
+                else if (ev.key === 'Escape') {
+                    input.value = originalName; // Revert
+                    input.blur();
+                }
             });
         });
+
+        // --- SESSION SAVE/LOAD ---
+        document.getElementById('saveSessionBtn').addEventListener('click', saveSession);
+
+        function uint8ArrayToBase64(bytes) {
+            let binary = '';
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+        function base64ToUint8Array(base64) {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function saveSession() {
+            if (tabStates.length === 0) {
+                alert("Nothing to save!");
+                return;
+            }
+
+            const serializableTabs = tabStates.map(state => {
+                const serializableState = { ...state };
+                delete serializableState.parser;
+
+                serializableState.waveforms = {};
+                for (const chId in state.waveforms) {
+                    serializableState.waveforms[chId] = Array.from(state.waveforms[chId]);
+                }
+                return serializableState;
+            });
+
+            const sessionData = {
+                version: "1.2.0-compressed",
+                savedAt: new Date().toISOString(),
+                tabs: serializableTabs
+            };
+
+            const jsonString = JSON.stringify(sessionData);
+            const compressedData = pako.deflate(jsonString);
+            const base64String = uint8ArrayToBase64(compressedData);
+            
+            const blob = new Blob([base64String], { type: 'text/plain' });
+            downloadBlob(blob, `session_${Date.now()}.graphx`);
+            statusText.textContent = "Session saved successfully.";
+        }
+
+        function loadSession(fileContent) {
+            try {
+                let jsonString = fileContent;
+                
+                if (!fileContent.trim().startsWith('{')) {
+                    const compressedData = base64ToUint8Array(fileContent);
+                    jsonString = pako.inflate(compressedData, { to: 'string' });
+                }
+
+                const sessionData = JSON.parse(jsonString);
+                if (!sessionData.version || !sessionData.tabs) {
+                    throw new Error("Invalid or corrupted session file.");
+                }
+
+                tabStates = [];
+                activeTabIndex = -1;
+                const overlapBtn = document.getElementById('createOverlapBtn');
+                tabContainer.innerHTML = '';
+                tabContainer.appendChild(overlapBtn);
+
+                sessionData.tabs.forEach((savedTab, index) => {
+                    const newState = { ...savedTab };
+                    // Add new features to old save files gracefully
+                    if(!newState.pointAnnotations) newState.pointAnnotations = [];
+                    newState.waveforms = {};
+                    for (const chId in savedTab.waveforms) {
+                        newState.waveforms[chId] = new Float32Array(savedTab.waveforms[chId]);
+                    }
+                    tabStates.push(newState);
+                    addTabToUI(newState.fileName, index);
+                });
+
+                if (tabStates.length > 0) {
+                    switchToTab(0);
+                } else {
+                    updateUIFromState(); // Clear UI if the session was empty
+                }
+                statusText.textContent = "Session loaded successfully.";
+            } catch (err) {
+                statusText.textContent = `Error loading session: ${err.message}`;
+                console.error(err);
+            }
+        }
+
+        // --- CSV Modal Logic ---
+        function showCsvOptionsModal(csvText, fileName) {
+            tempCsvData = { text: csvText, fileName: fileName };
+            const lines = csvText.replace(/\r/g, '').split('\n');
+            
+            let preview = '';
+            if (lines.length <= 6) {
+                preview = lines.join('\n');
+            } else {
+                preview = lines.slice(0, 5).join('\n') + '\n...\n' + lines[lines.length - 1];
+            }
+            document.getElementById('csvPreviewContent').textContent = preview;
+            document.getElementById('csvOptionsFileName').textContent = fileName;
+
+            document.getElementById('csvDelimiter').value = ',';
+            document.getElementById('csvHasHeader').checked = true;
+
+            updateCsvColumnMapping();
+            csvOptionsModal.style.display = 'flex';
+        }
+
+        function updateCsvColumnMapping() {
+            const delimiter = document.getElementById('csvDelimiter').value || ',';
+            const hasHeader = document.getElementById('csvHasHeader').checked;
+            const lines = tempCsvData.text.replace(/\r/g, '').split('\n');
+            if (lines.length === 0) return;
+
+            const firstLine = lines[0].trim();
+            const columns = firstLine.split(delimiter);
+            const container = document.getElementById('csvColumnMapping');
+            container.innerHTML = '';
+
+            if (columns.length === 1 && firstLine) {
+                container.innerHTML = `<div class="control-item"><span>Single column detected. It will be plotted as a channel with point numbers (0, 1, 2...) for the X-axis.</span></div>`;
+                return;
+            }
+            
+            columns.forEach((col, index) => {
+                let headerName;
+                if (hasHeader) {
+                    headerName = col.trim().replace(/^"|"$/g, '');
+                } else {
+                    headerName = (index === 0) ? 'x (time)' : `f(x) ${index}`;
+                }
+                const row = document.createElement('div');
+                row.className = 'control-item';
+                row.innerHTML = `
+                    <span class="control-label" title="${headerName}" style="color: #eee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${headerName}</span>
+                    <select class="control-input csv-role-select" data-col-index="${index}" style="width: 150px;">
+                        <option value="channel">Channel (Y-Axis)</option>
+                        <option value="time">Time (X-Axis)</option>
+                        <option value="ignore">Ignore</option>
+                    </select>
+                `;
+                container.appendChild(row);
+            });
+
+            const selects = container.querySelectorAll('select');
+            const timeKeywords = ['time', 't', 'seconds', 's', 'x'];
+            let timeColumnFound = false;
+            
+            columns.forEach((col, index) => {
+                const normalizedHeader = col.trim().replace(/^"|"$/g, '').toLowerCase();
+                if (!timeColumnFound && timeKeywords.includes(normalizedHeader)) {
+                    selects[index].value = 'time';
+                    timeColumnFound = true;
+                }
+            });
+
+            if (!timeColumnFound && selects.length > 0) {
+                selects[0].value = 'time';
+            }
+        }
+
+        document.getElementById('csvDelimiter').addEventListener('input', updateCsvColumnMapping);
+        document.getElementById('csvHasHeader').addEventListener('change', updateCsvColumnMapping);
+
+        document.getElementById('csvOptionsConfirm').addEventListener('click', () => {
+            const options = {
+                delimiter: document.getElementById('csvDelimiter').value || ',',
+                hasHeader: document.getElementById('csvHasHeader').checked,
+                timeColumnIndex: -1,
+                dataColumnIndices: [],
+                autoTime: false,
+            };
+
+            const firstLine = tempCsvData.text.split('\n')[0].trim();
+            if (firstLine.split(options.delimiter).length === 1 && firstLine) {
+                options.autoTime = true;
+                options.dataColumnIndices.push(0);
+            } else {
+                const selects = document.querySelectorAll('.csv-role-select');
+                selects.forEach(select => {
+                    const colIndex = parseInt(select.dataset.colIndex, 10);
+                    if (select.value === 'time') {
+                        options.timeColumnIndex = colIndex;
+                    } else if (select.value === 'channel') {
+                        options.dataColumnIndices.push(colIndex);
+                    }
+                });
+
+                if (options.timeColumnIndex === -1 && options.dataColumnIndices.length > 0) {
+                     options.autoTime = true;
+                     options.timeColumnIndex = 0; // dummy, won't be used
+                } else if (options.timeColumnIndex === -1) {
+                    alert("Please select one column for 'Time (X-Axis)'.");
+                    return;
+                }
+            }
+            
+            csvOptionsModal.style.display = 'none';
+            statusText.textContent = `Processing ${tempCsvData.fileName}...`;
+
+            try {
+                const parser = new CsvParser(tempCsvData.text, options);
+                if (!parser.isValid()) {
+                    throw new Error(parser.error || "Failed to parse CSV file with selected options.");
+                }
+                const newState = createDefaultTabState(tempCsvData.fileName, parser);
+                const newIndex = tabStates.length;
+                tabStates.push(newState);
+                addTabToUI(tempCsvData.fileName, newIndex);
+                switchToTab(newIndex);
+                statusText.textContent = `Loaded: ${tempCsvData.fileName}`;
+            } catch (err) {
+                statusText.textContent = `Error processing ${tempCsvData.fileName}: ${err.message}`;
+                console.error(err);
+            }
+        });
+        
+        // --- Paste Logic ---
+        document.body.addEventListener('paste', handlePaste);
+
+        function handlePaste(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            if (!text) return;
+
+            const lines = text.trim().split('\n');
+            if (lines.length === 0) return;
+            
+            const delimiter = lines[0].includes('\t') ? '\t' : ',';
+            const numCols = lines[0].split(delimiter).length;
+            
+            if (numCols > 1) {
+                showCsvOptionsModal(text, "Pasted Data");
+            } else {
+                const data = lines.map(l => parseFloat(l)).filter(n => !isNaN(n));
+                if (data.length > 1) {
+                    tempPastedData = data;
+                    document.getElementById('pasteTimeStart').value = '0';
+                    document.getElementById('pasteTimeStep').value = '1';
+                    pasteModal.style.display = 'flex';
+                }
+            }
+        }
+
+        document.getElementById('pasteConfirmBtn').addEventListener('click', () => {
+            const start = parseEng(document.getElementById('pasteTimeStart').value);
+            const step = parseEng(document.getElementById('pasteTimeStep').value);
+            if (isNaN(start) || isNaN(step) || step <= 0) {
+                alert("Invalid start or step value.");
+                return;
+            }
+            const parser = new PastedDataParser(tempPastedData, { start, step });
+            const newState = createDefaultTabState('Pasted Data', parser, { start, step });
+            const newIndex = tabStates.length;
+            tabStates.push(newState);
+            addTabToUI(newState.fileName, newIndex);
+            switchToTab(newIndex);
+            statusText.textContent = `Loaded: Pasted Data`;
+            pasteModal.style.display = 'none';
+        });
+
 
         setupModals();
         new ResizeObserver(resizeCanvas).observe(document.getElementById('waveformContainer'));
