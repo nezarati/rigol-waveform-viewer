@@ -33,64 +33,63 @@ It extends basic viewing with a rich set of features for in-depth analysis, prof
 ***
 
 ### 📈 Waveform Display & Interaction
-* **Multi-File Overlap View**: Click the **Overlap** icon (<i class="fas fa-layer-group"></i>) in the tab bar to create a dedicated **'Overlap' tab**. This powerful view combines all visible channels from all other open files into a single, fully interactive chart, automatically assigning distinct colors for easy identification.
+* **Multi-File Overlap View**: Click the **Overlap** icon (<i class="fas fa-layer-group"></i>) in the tab bar to create a dedicated **'Overlap' tab**. This powerful view combines all visible channels from all open files into a single, fully interactive chart, automatically assigning distinct colors for easy identification.
 * **Stacked or Overlapped Views**: In individual file tabs, toggle between the default overlapped view and a **separate, stacked view** where each channel gets its own plot area for clear, uncluttered analysis.
 * **Modern Chart Interaction**:
-    * **Pan**:
-        * Click and drag on the chart background to pan all channels **horizontally and vertically**.
-        * In separate view, drag a subplot to pan it **vertically independently**.
-        * Click and drag a specific waveform trace to adjust its vertical offset.
-    * **Axis-Specific Zoom**: Hover your mouse over an axis and use the **Mouse Wheel** to zoom that axis independently. Works for the time (bottom) axis and for each individual channel's voltage (left) axis.
+    * **Pan**:
+        * Click and drag anywhere on the chart background to pan all channels **horizontally and vertically** together.
+        * In separate view, drag a subplot to pan it **vertically independently**.
+        * Click and drag a specific waveform trace to adjust its vertical offset.
+    * **Axis-Specific Zoom**: Hover your mouse over an axis and use the **Mouse Wheel** to zoom that axis independently. Works for the time (bottom) axis and for each individual channel's voltage (left) axis.
     * **Trace Identification**: **Hover the mouse over any waveform** to display a tooltip with its full name, perfect for distinguishing traces in crowded or overlapped views.
-    * **Snap to Common Scales**: An optional mode that provides a reliable, stepped zoom experience through standard `1-2-5` scale values (e.g., 1ms, 2ms, 5ms).
-    * **Area Zoom**: Press the `Z` key to activate zoom mode, then click and drag to select and zoom into a specific region.
+    * **Snap to Common Scales**: An optional mode that provides a reliable, stepped zoom experience through standard `1-2-5` scale values (e.g., 1ms, 2ms, 5ms).
+    * **Area Zoom**: Press the `Z` key to activate zoom mode, then click and drag to select and zoom into a specific region.
 * **View Controls**:
-    * **Fit & Reset View**:
-        * Press `F` to **Fit Y-Axis**. If the mouse is over a specific axis or subplot, only that channel is fitted. Otherwise, all visible channels are fitted to the data currently in view.
-        * **Double-Click** the plot to perform a **Full Reset**, fitting all visible data on both axes.
-    * **Relative Time**: Set the start of the current view as $t=0$ for relative time measurements.
+    * **Fit & Reset View**:
+        * Press `F` to **Fit Y-Axis**. If the mouse is over a specific axis or subplot, only that channel is fitted. Otherwise, all visible channels are fitted to the data currently in view.
+        * **Double-Click** the plot to perform a **Full Reset**, fitting all visible data on both axes.
+    * **Relative Time**: Set the start of the current view as $t=0$ for relative time measurements.
 * **Channel Management**:
-    * Toggle channel visibility.
-    * Swap the drawing order (bring a channel to the front).
-    * Assign custom names by **clicking directly on the channel name** in the sidebar.
+    * **Visibility**: Toggle channel visibility on and off.
+    * **Draw Order**: Swap the drawing order to bring a channel to the front.
+    * **Custom Names**: Assign custom names by **clicking directly on the channel name** in the sidebar.
 
 ***
 
 ### 📏 Measurements & Analysis
-* **Live Measurement Table**: An on-screen table displays key statistics for the *visible* portion of each waveform.
-    * **Available Calculations**: **Max**, **Min**, **Average**, and **RMS** voltage.
-    * **Customizable**: Toggle which measurements are displayed.
-    * (Note: The statistics table is available for individual file tabs only).
+* **Live Measurement Table**: An on-screen table displays key statistics for the *visible* portion of each waveform. (Note: The statistics table is available for individual file tabs only).
+    * **Available Calculations**: **Max**, **Min**, **Average**, and **RMS** voltage.
+    * **Customizable**: Toggle which measurements are displayed.
 * **Cursor Measurements**:
-    * Enable two horizontal and two vertical cursors for precise readouts.
-    * Measures **$\Delta V$** (voltage difference), **$\Delta t$** (time difference), and frequency ($1/\Delta t$).
-    * **Channel Tracking**: Cursors can "snap" to a selected channel's waveform.
-    * **Quick Set**: Instantly move cursors to the max/min voltage points in the current view.
+    * **Precise Readouts**: Enable two horizontal and two vertical cursors for precise readouts.
+    * **Calculations**: Measures **$\Delta V$** (voltage difference), **$\Delta t$** (time difference), and frequency ($1/\Delta t$).
+    * **Channel Tracking**: Cursors can "snap" to a selected channel's waveform.
+    * **Quick Set**: Instantly move cursors to the max/min voltage points in the current view.
 
 ***
 
 ### ✒️ Annotations & Targeted Measurements
 * **Annotation Channel Selection**: Precisely control which waveform is used as the reference for measurements and new annotations.
-    * **Toolbar Control**: Select the active channel using the buttons in the top toolbar. This works for all tabs, including the Overlap tab.
-    * **Keyboard Shortcut**: Instantly switch the annotation reference to the **1st, 2nd, ... 9th** channel in the sidebar list by pressing the `1` - `9` keys.
+    * **Toolbar Control**: Select the active channel using the buttons in the top toolbar. This works for all tabs, including the Overlap tab.
+    * **Keyboard Shortcut**: Instantly switch the annotation reference to the **1st, 2nd, ... 9th** channel in the sidebar list by pressing the `1` - `9` keys.
 * **Quick Measurement / Area Annotation**: Hold `Shift` + `Drag` to draw a measurement box showing `Δt`, `ΔV`, and frequency ($1/\Delta t$). The box is colored based on the selected measurement channel. If **Annotate Mode** is active, the box becomes a persistent annotation upon release.
 * **Text Annotation**: Press `T` to enter text mode and click on the plot to add labels.
 * **Manage Annotations**:
-    * Select annotations to move them.
-    * Press `Delete` to remove a selected annotation.
-    * Press `Ctrl` + `H` to hide or show all annotations on the chart.
+    * **Select & Move**: Select annotations to move them.
+    * **Delete**: Press `Delete` to remove a selected annotation.
+    * **Toggle Visibility**: Press `Ctrl` + `H` to hide or show all annotations on the chart.
 
 ***
 
 ### 📤 Exporting & Copying
 * **Quick Copy**: Press `Ctrl` + `C` to copy the current view to the clipboard as a PNG image. A **"B&W Copy"** option is available for high-contrast pastes.
 * **Advanced Export Dialog**: Generate professional-grade output for reports or data processing.
-    * **Formats**: **PNG**, **SVG** (vector), and **CSV** (raw data).
-    * **Data Scope**: Export either the current zoomed-in view or the entire waveform dataset.
-    * **Styling Options**:
-        * **Black & White**: Creates a high-contrast, printer-friendly version.
-        * **IEEE Style**: Formats the plot for academic publications (specific size, `10pt Times New Roman` font, simplified colors).
-        * **Measurements Below Plot**: Option to place the measurement table neatly at the bottom.
+    * **Formats**: **PNG**, **SVG** (vector), and **CSV** (raw data).
+    * **Data Scope**: Export either the current zoomed-in view or the entire waveform dataset.
+    * **Styling Options**:
+        * **Black & White**: Creates a high-contrast, printer-friendly version.
+        * **IEEE Style**: Formats the plot for academic publications (specific size, `10pt Times New Roman` font, simplified colors).
+        * **Measurements Below Plot**: Option to place the measurement table neatly at the bottom.
 
 ***
 
@@ -107,9 +106,9 @@ This viewer is intentionally designed as a single, self-contained `index.html` f
 
 ## How to Use
 
-1.  **Download**: Save the `index.html` file from this repository to your computer.
-2.  **Open**: Open the file in a modern web browser (e.g., Google Chrome, Firefox, Edge).
-3.  **Load**: Drag a `.wfm` file onto the page or use the "Load WFM File" button.
+1.  **Download**: Save the `index.html` file from this repository to your computer.
+2.  **Open**: Open the file in a modern web browser (e.g., Google Chrome, Firefox, Edge).
+3.  **Load**: Drag a `.wfm` file onto the page or use the "Load WFM File" button.
 
 ***
 
@@ -118,10 +117,10 @@ This viewer is intentionally designed as a single, self-contained `index.html` f
 This tool is designed to be compatible with `.wfm` files from a wide range of modern Rigol and Tektronix oscilloscopes. It has been tested with files from the following series:
 
 * **Rigol**:
-    * DS1000Z (e.g., DS1054Z)
-    * MSO5000
+    * DS1000Z (e.g., DS1054Z)
+    * MSO5000
 * **Tektronix**:
-    * Various series using the standard 16-bit integer `.wfm` format.
+    * Various series using the standard 16-bit integer `.wfm` format.
 
 If your oscilloscope model is not listed, it is still likely to work. Please open an issue to confirm compatibility and help us update this list.
 
