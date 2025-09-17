@@ -537,6 +537,11 @@
         let lastMousePos = { x: 0, y: 0 };
         let hoveredChannelInfo = null;
         let lastHoveredChannelId = null;
+        
+        // State for annotation selection cycling
+        let clickCycleState = { pos: null, hits: [], index: -1 };
+        const CLICK_CYCLE_TOLERANCE = 5; // pixels
+
 
         const X_DIVS = 10;
         const Y_DIVS = 10;
@@ -808,9 +813,9 @@
                             drawLiveMeasurementBox(state);
                         }
                     }
-                     if (hoveredChannelInfo) {
-                          drawHoverTooltip();
-                     }
+                         if (hoveredChannelInfo) {
+                              drawHoverTooltip();
+                         }
                 }
         }
         
@@ -974,7 +979,7 @@
             if (vRange <= 0) return;
 
             const dataTimePerPoint = chInfo.originalMetadata ? chInfo.originalMetadata.timePerPoint : state.metadata.timePerPoint;
-            const dataNumPoints = chInfo.originalMetadata ? chInfo.originalMetadata.numPoints : state.metadata.numPoints;
+            const dataNumPoints = voltageData.length; // Use actual data length
             const timeOffset = state.metadata.timeStart || 0;
             const viewStartTime = (state.view.startIndex * state.metadata.timePerPoint);
             const viewEndTime = (state.view.endIndex * state.metadata.timePerPoint);
@@ -1183,20 +1188,20 @@
                  let finalRect = preferredRect;
                  
                  if (drawnLabelRects.some(rect => rectanglesOverlap(preferredRect, rect))) {
-                     const boxPadding = 15;
-                     const positions = [
-                         { x: pos.x + boxPadding, y: pos.y - textHeight / 2 }, // Right
-                         { x: pos.x - textWidth - 10 - boxPadding, y: pos.y - textHeight / 2 }, // Left
-                         { x: pos.x - (textWidth + 10)/2, y: pos.y - textHeight - boxPadding }, // Top
-                         { x: pos.x - (textWidth + 10)/2, y: pos.y + boxPadding }, // Bottom
-                     ];
-                     for (const p of positions) {
-                         const alternativeRect = { x: p.x, y: p.y, w: textWidth + 10, h: textHeight };
-                         if (!drawnLabelRects.some(rect => rectanglesOverlap(alternativeRect, rect))) {
-                             finalRect = alternativeRect;
-                             break;
-                         }
-                     }
+                      const boxPadding = 15;
+                      const positions = [
+                           { x: pos.x + boxPadding, y: pos.y - textHeight / 2 }, // Right
+                           { x: pos.x - textWidth - 10 - boxPadding, y: pos.y - textHeight / 2 }, // Left
+                           { x: pos.x - (textWidth + 10)/2, y: pos.y - textHeight - boxPadding }, // Top
+                           { x: pos.x - (textWidth + 10)/2, y: pos.y + boxPadding }, // Bottom
+                      ];
+                      for (const p of positions) {
+                          const alternativeRect = { x: p.x, y: p.y, w: textWidth + 10, h: textHeight };
+                          if (!drawnLabelRects.some(rect => rectanglesOverlap(alternativeRect, rect))) {
+                              finalRect = alternativeRect;
+                              break;
+                          }
+                      }
                  }
                 
                 if (context === ctx) {
@@ -1210,9 +1215,9 @@
                  context.arc(pos.x, pos.y, isSelected ? 6 : 5, 0, 2 * Math.PI);
                  context.fill();
                  if (isSelected) {
-                     context.strokeStyle = colors.selection;
-                     context.lineWidth = 2;
-                     context.stroke();
+                      context.strokeStyle = colors.selection;
+                      context.lineWidth = 2;
+                      context.stroke();
                  }
 
                  // Draw leader line and text box
@@ -1793,8 +1798,8 @@ function setupChannelUI(state) {
                    const firstBtn = document.querySelector(`.channel-button[data-channel="${state.drawOrder[0]}"] .ch-order`);
                    if(firstBtn) firstBtn.textContent='(Back)';
                    if (state.drawOrder.length > 1) {
-                         const lastBtn = document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`);
-                         if(lastBtn) lastBtn.textContent='(Front)';
+                        const lastBtn = document.querySelector(`.channel-button[data-channel="${state.drawOrder[state.drawOrder.length-1]}"] .ch-order`);
+                        if(lastBtn) lastBtn.textContent='(Front)';
                    }
             }
             const radioToCheck = cursorContainer.querySelector(`input[name="cursorTrack"][value="${state.cursors.trackingChannel || 'null'}"]`);
@@ -1833,58 +1838,67 @@ function setupChannelUI(state) {
             return null;
         }
 
-        function getInteractionAtPos(pos, state) {
+        function findAllInteractionsAtPos(pos, state) {
+            const hits = [];
+            if (!state) return hits;
+            
             const handleSize = 8, tol = handleSize / 2 + 2;
             const refCh = getVisibleChannels(state)[0];
 
-            for (let i = state.pointAnnotations.length - 1; i >= 0; i--) {
-                const ann = state.pointAnnotations[i];
-                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, ann.channel);
-                ctx.font = '14px Segoe UI';
-                const textWidth = ctx.measureText(ann.text).width;
-                const textX = screenPos.x + ann.textPos.dx, textY = screenPos.y + ann.textPos.dy;
-                if (pos.x >= textX && pos.x <= textX + textWidth + 10 && pos.y >= textY - 11 && pos.y <= textY + 11) { return { type: 'pointAnnotation', index: i, handle: 'text' }; }
-                if (Math.hypot(pos.x - screenPos.x, pos.y - screenPos.y) < tol + 3) return { type: 'pointAnnotation', index: i, handle: 'body' };
-            }
-            for (let i = state.textAnnotations.length - 1; i >= 0; i--) {
-                const ann = state.textAnnotations[i];
-                const annChannel = ann.channel || refCh;
-                if(!annChannel) continue;
-                const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, annChannel);
-                ctx.font = '14px Segoe UI';
-                const textWidth = ctx.measureText(ann.text).width;
-                if (pos.x >= screenPos.x && pos.x <= screenPos.x + textWidth + 10 && pos.y >= screenPos.y - 18 && pos.y <= screenPos.y + 4) { return { type: 'textAnnotation', index: i, handle: 'body' }; }
-            }
-            for (let i = state.annotations.length - 1; i >= 0; i--) {
-                const box = state.annotations[i];
-                const boxCh = box.channel || refCh;
-                if(!boxCh) continue;
-                const p1 = dataToScreen({time: box.t1, voltage: box.v1}, state.view, state, boxCh);
-                const p2 = dataToScreen({time: box.t2, voltage: box.v2}, state.view, state, boxCh);
-                const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y);
-                const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === i;
-                if (isSelected) {
-                    if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - y) < tol) return { type: 'annotation', index: i, handle: 'tl' };
-                    if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - y) < tol) return { type: 'annotation', index: i, handle: 'tr' };
-                    if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - (y + h)) < tol) return { type: 'annotation', index: i, handle: 'bl' };
-                    if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - (y + h)) < tol) return { type: 'annotation', index: i, handle: 'br' };
+            // Order determines Z-index for selection: point -> text -> area -> cursor -> channel
+            (state.pointAnnotations || []).forEach((ann, index) => {
+                 const screenPos = dataToScreen({time: ann.time, voltage: ann.voltage}, state.view, state, ann.channel);
+                 if (ann._lastRenderedRect) {
+                     const r = ann._lastRenderedRect;
+                     if (pos.x >= r.x && pos.x <= r.x + r.w && pos.y >= r.y && pos.y <= r.y + r.h) {
+                         hits.push({ type: 'pointAnnotation', index: index, handle: 'text' });
+                     }
+                 }
+                 if (Math.hypot(pos.x - screenPos.x, pos.y - screenPos.y) < tol + 3) {
+                     hits.push({ type: 'pointAnnotation', index: index, handle: 'body' });
+                 }
+            });
+
+            (state.textAnnotations || []).forEach((ann, index) => {
+                if(ann._lastRenderedRect) {
+                    const r = ann._lastRenderedRect;
+                    if (pos.x >= r.x && pos.x <= r.x + r.w && pos.y >= r.y && pos.y <= r.y + r.h) {
+                         hits.push({ type: 'textAnnotation', index: index, handle: 'body' });
+                    }
                 }
-                if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) return { type: 'annotation', index: i, handle: 'body' };
-            }
-            if (state.cursors.enabled) {
-                if (!refCh) return { type: null };
+            });
+
+            (state.annotations || []).forEach((box, index) => {
+                 const boxCh = box.channel || refCh;
+                 if(!boxCh) return;
+                 const p1 = dataToScreen({time: box.t1, voltage: box.v1}, state.view, state, boxCh);
+                 const p2 = dataToScreen({time: box.t2, voltage: box.v2}, state.view, state, boxCh);
+                 const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p1.x - p2.x), h = Math.abs(p1.y - p2.y);
+                 const isSelected = activeInteraction.type === 'annotation' && activeInteraction.index === index;
+                 if (isSelected) {
+                     if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - y) < tol) { hits.push({ type: 'annotation', index: index, handle: 'tl' }); }
+                     if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - y) < tol) { hits.push({ type: 'annotation', index: index, handle: 'tr' }); }
+                     if (Math.abs(pos.x - x) < tol && Math.abs(pos.y - (y + h)) < tol) { hits.push({ type: 'annotation', index: index, handle: 'bl' }); }
+                     if (Math.abs(pos.x - (x + w)) < tol && Math.abs(pos.y - (y + h)) < tol) { hits.push({ type: 'annotation', index: index, handle: 'br' }); }
+                 }
+                 if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) { hits.push({ type: 'annotation', index: index, handle: 'body' }); }
+            });
+
+            if (state.cursors.enabled && refCh) {
                 const x1_s = dataToScreen({time: state.cursors.x1, voltage: 0}, state.view, state, refCh).x;
                 const x2_s = dataToScreen({time: state.cursors.x2, voltage: 0}, state.view, state, refCh).x;
                 const y1_s = dataToScreen({time: 0, voltage: state.cursors.y1}, state.view, state, refCh).y;
                 const y2_s = dataToScreen({time: 0, voltage: state.cursors.y2}, state.view, state, refCh).y;
-                if (Math.abs(pos.x - x1_s) < tol) return { type: 'cursor', handle: 'x1' };
-                if (Math.abs(pos.x - x2_s) < tol) return { type: 'cursor', handle: 'x2' };
-                if (Math.abs(pos.y - y1_s) < tol) return { type: 'cursor', handle: 'y1' };
-                if (Math.abs(pos.y - y2_s) < tol) return { type: 'cursor', handle: 'y2' };
+                if (Math.abs(pos.x - x1_s) < tol) { hits.push({ type: 'cursor', handle: 'x1' }); }
+                if (Math.abs(pos.x - x2_s) < tol) { hits.push({ type: 'cursor', handle: 'x2' }); }
+                if (Math.abs(pos.y - y1_s) < tol) { hits.push({ type: 'cursor', handle: 'y1' }); }
+                if (Math.abs(pos.y - y2_s) < tol) { hits.push({ type: 'cursor', handle: 'y2' }); }
             }
+            
             const hitChannel = hitTestWaveform(pos, state);
-            if (hitChannel) { return { type: 'channel-drag', channel: hitChannel }; }
-            return { type: null };
+            if (hitChannel) { hits.push({ type: 'channel-drag', channel: hitChannel }); }
+            
+            return hits;
         }
         
         canvas.addEventListener('mousedown', e => {
@@ -1898,7 +1912,35 @@ function setupChannelUI(state) {
                 return;
             }
 
-            const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+            const currentPos = { x: e.offsetX, y: e.offsetY };
+            let interaction = { type: null };
+            const allHits = findAllInteractionsAtPos(currentPos, state);
+
+            if (state.annotationMode) {
+                const isCycleClick = clickCycleState.pos && Math.hypot(currentPos.x - clickCycleState.pos.x, currentPos.y - clickCycleState.pos.y) < CLICK_CYCLE_TOLERANCE;
+                
+                if (isCycleClick && clickCycleState.hits.length > 1) {
+                    // It's a subsequent click on the same spot, so cycle.
+                    clickCycleState.index = (clickCycleState.index + 1) % clickCycleState.hits.length;
+                    interaction = clickCycleState.hits[clickCycleState.index];
+                } else {
+                    // It's a new click. Find any annotations.
+                    const annotationHits = allHits.filter(h => h.type.includes('Annotation'));
+                    if (annotationHits.length > 0) {
+                        clickCycleState = { pos: currentPos, hits: annotationHits, index: 0 };
+                        interaction = annotationHits[0];
+                    } else {
+                        // No annotations hit, reset cycle and fall through to normal behavior.
+                        clickCycleState = { pos: null, hits: [], index: -1 };
+                        interaction = allHits[0] || { type: null };
+                    }
+                }
+            } else {
+                // Not in annotation mode, just get the top-most interaction.
+                clickCycleState = { pos: null, hits: [], index: -1 };
+                interaction = allHits[0] || { type: null };
+            }
+            
             activeInteraction = { ...interaction, startX: e.offsetX, startY: e.offsetY };
             
             if (interaction.type === 'channel-drag') {
@@ -2019,7 +2061,7 @@ function setupChannelUI(state) {
                     draw();
                 }
                 lastHoveredChannelId = hitChannelId;
-                const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+                const interaction = findAllInteractionsAtPos({ x: e.offsetX, y: e.offsetY }, state)[0] || { type: null };
                 if (zoomModeEnabled) canvas.style.cursor = 'zoom-in';
                 else if (textAnnotationMode) canvas.style.cursor = 'text';
                 else if (pointAnnotationMode) canvas.style.cursor = 'crosshair';
@@ -2112,7 +2154,9 @@ canvas.addEventListener('mouseup', e => {
         canvas.addEventListener('dblclick', (e) => {
             const state = getActiveState();
             if (!state) return;
-            const interaction = getInteractionAtPos({ x: e.offsetX, y: e.offsetY }, state);
+            const allHits = findAllInteractionsAtPos({ x: e.offsetX, y: e.offsetY }, state);
+            const interaction = allHits.find(h => h.type.includes('Annotation')) || {type: null};
+            
             if (interaction.type === 'textAnnotation') {
                 editTextAnnotation(interaction.index, 'text');
             } else if (interaction.type === 'pointAnnotation') {
@@ -2535,7 +2579,7 @@ canvas.addEventListener('mouseup', e => {
                    const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isWB: document.getElementById('wbExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
                    executeExport(options); exportModal.style.display = 'none'; 
                });
-         }
+        }
          async function exportToClipboard() {
                const state = getActiveState(); if (!state) return;
                const isWB = document.getElementById('wbCopyCheckbox').checked;
@@ -2545,7 +2589,7 @@ canvas.addEventListener('mouseup', e => {
                    statusText.textContent = 'Copied to clipboard!';
                    setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
                } catch (err) { statusText.textContent = 'Error: Failed to copy to clipboard.'; console.error(err); }
-         }
+        }
 
         async function executeExport(options) {
             const state = getActiveState();
@@ -2580,40 +2624,40 @@ canvas.addEventListener('mouseup', e => {
 
 
         function downloadBlob(blob, filename) {
-              const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename;
-              document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+             const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename;
+             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
         }
 
         function generateImageBlob(options) {
-              return new Promise((resolve, reject) => {
-                    const state = getActiveState(); if (!state) return reject('No active state');
-                    const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
-                    const w = canvas.clientWidth, h = canvas.clientHeight;
-                    tempCanvas.width = w * dpr; tempCanvas.height = h * dpr;
-                    tempCtx.scale(dpr, dpr);
+             return new Promise((resolve, reject) => {
+                 const state = getActiveState(); if (!state) return reject('No active state');
+                 const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
+                 const w = canvas.clientWidth, h = canvas.clientHeight;
+                 tempCanvas.width = w * dpr; tempCanvas.height = h * dpr;
+                 tempCtx.scale(dpr, dpr);
 
-                    const { isWB, isIEEE } = options;
-                    const colors = {
-                        bg: isWB || isIEEE ? '#FFFFFF' : '#1e1e1e',
-                        grid: isWB || isIEEE ? '#CCCCCC' : '#333',
-                        text: isWB || isIEEE ? '#000000' : '#a0a0a0',
-                        axisBorder: isWB || isIEEE ? '#000000' : '#888',
-                        cursorTime: isWB || isIEEE ? '#555555' : '#f0ad4e',
-                        cursorVolt: isWB || isIEEE ? '#888888' : '#32f0ad',
-                        selection: '#00bcf2',
-                        statsBg: isWB || isIEEE ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
-                        bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500']
-                    };
-                    
-                    const tempState = JSON.parse(JSON.stringify(state));
-                    Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
-                    const targetView = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
-                    tempState.view = targetView;
-                    
-                    drawToContext(tempCtx, tempState, colors);
-                    
-                    tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
-                    });
+                 const { isWB, isIEEE } = options;
+                 const colors = {
+                     bg: isWB || isIEEE ? '#FFFFFF' : '#1e1e1e',
+                     grid: isWB || isIEEE ? '#CCCCCC' : '#333',
+                     text: isWB || isIEEE ? '#000000' : '#a0a0a0',
+                     axisBorder: isWB || isIEEE ? '#000000' : '#888',
+                     cursorTime: isWB || isIEEE ? '#555555' : '#f0ad4e',
+                     cursorVolt: isWB || isIEEE ? '#888888' : '#32f0ad',
+                     selection: '#00bcf2',
+                     statsBg: isWB || isIEEE ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+                     bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500']
+                 };
+                 
+                 const tempState = JSON.parse(JSON.stringify(state));
+                 Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
+                 const targetView = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
+                 tempState.view = targetView;
+                 
+                 drawToContext(tempCtx, tempState, colors);
+                 
+                 tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
+                 });
         }
         
         function generateAndDownloadCSV(options) {
@@ -3190,8 +3234,22 @@ canvas.addEventListener('mouseup', e => {
                 }
             });
 
+            // Recalculate the total number of points based on the longest waveform
+            let maxPoints = 0;
+            Object.values(state.waveforms).forEach(wfm => {
+                if (wfm.length > maxPoints) {
+                    maxPoints = wfm.length;
+                }
+            });
+
+            if (maxPoints > state.metadata.numPoints) {
+                state.metadata.numPoints = maxPoints;
+                state.metadata.totalTime = maxPoints * state.metadata.timePerPoint;
+            }
+            
+            // Refresh UI and reset view to show all data
             updateUIFromState();
-            fitYToAllVisible();
+            fullResetView();
         }
 
         const pasteDestinationModal = document.getElementById('pasteDestinationModal');
