@@ -231,11 +231,12 @@
                       <label style="margin-right: 15px;"><input type="radio" name="format" value="svg"> SVG</label>
                       <label><input type="radio" name="format" value="csv"> CSV</label>
                   </div>
-                  <div>
+                                    <div>
                       <h3 style="margin-bottom: 8px;">Include & Style</h3>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
+                      <label style="margin-right: 15px;"><input type="checkbox" id="exportWhiteBgCheckbox"> White background</label>
                       <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
                   </div>
                   <div id="png-options" style="display: none;">
@@ -925,34 +926,45 @@
         }
         function drawGrid(context, p, colors, isSeparate=false, isLast=true){ if (!colors.showGrid) return; context.strokeStyle=colors.grid;context.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;context.beginPath();context.moveTo(x,p.y);context.lineTo(x,p.y+p.height);context.stroke()} const yDivs = (isSeparate || (displayOptions.separateView && !getActiveState()?.isOverlap)) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;context.beginPath();context.moveTo(p.x,y);context.lineTo(p.x+p.width,y);context.stroke()}}
         
-        function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
-            context.fillStyle=colors.text; 
-            context.font='14px Segoe UI'; 
-            context.textAlign='center';
-            context.textBaseline='top';
-            if (view && state) { 
+                function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
+            context.fillStyle = colors.text;
+            context.font = '14px Segoe UI';
+            context.textAlign = 'center';
+            context.textBaseline = 'top';
+
+            // Dynamic tick density to avoid overlap
+            const MIN_GAP_X = 45; // px between adjacent X labels
+            const MIN_GAP_Y = 16; // px between adjacent Y labels
+
+            if (view && state) {
                 const timeOffset = state.metadata.timeStart || 0;
                 const timeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
-                if(timeSpan > 0){
+                if (timeSpan > 0) {
                     const tStart = (view.startIndex * state.metadata.timePerPoint) + timeOffset;
-                    for(let i=0; i<=X_DIVS; i++){
-                        const x = p.x + i/X_DIVS*p.width;
-                        const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
-                        const isLastSeparateView = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
+                    // Compute step to ensure minimum pixel gap. When rendering to the export canvas, context !== ctx
+                    const baseStepX = Math.max(1, Math.ceil((MIN_GAP_X) / (p.width / X_DIVS)));
+                    const isLastSeparateView = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
+                    for (let i = 0; i <= X_DIVS; i++) {
+                        if (i % baseStepX !== 0) continue;
+                        const x = p.x + (i / X_DIVS) * p.width;
+                        const timeVal = displayOptions.relativeTime ? ((i / X_DIVS) * timeSpan) : (tStart + (i / X_DIVS) * timeSpan);
                         if (!displayOptions.separateView || state.isOverlap || isLastSeparateView) {
-                             context.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
+                            context.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
                         }
                     }
                 }
             }
+
             const isLastSeparateViewForTitle = separateChannelId && getVisibleChannels(state)?.slice(-1)[0] === separateChannelId;
             if (!displayOptions.separateView || state?.isOverlap || isLastSeparateViewForTitle) {
-                 context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+                context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
             }
 
             if (state) {
                 const visibleChannels = separateChannelId ? [separateChannelId] : getVisibleChannels(state);
                 const yDivs = separateChannelId ? Y_DIVS_SEPARATE : Y_DIVS;
+                const baseStepY = Math.max(1, Math.ceil((MIN_GAP_Y) / (p.height / yDivs)));
+
                 visibleChannels.forEach((chId, i) => {
                     const chInfo = state.channelInfo[chId];
                     if (!chInfo) return;
@@ -963,9 +975,10 @@
                     context.textAlign = 'right';
                     context.textBaseline = 'middle';
                     if (vRange > 0) {
-                        for(let j=0; j<=yDivs; j++){
-                            const y = p.y + j/yDivs*p.height;
-                            const v = chInfo.vMax - j/yDivs*vRange;
+                        for (let j = 0; j <= yDivs; j++) {
+                            if (j % baseStepY !== 0) continue;
+                            const y = p.y + (j / yDivs) * p.height;
+                            const v = chInfo.vMax - (j / yDivs) * vRange;
                             context.fillText(formatEng(v, '', 3, false), axisX, y);
                         }
                     }
@@ -2607,7 +2620,7 @@ canvas.addEventListener('mouseup', e => {
                ieeeCheckbox.addEventListener('change', togglePngOptions);
                togglePngOptions(); // initial check
 
-               document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
+                              document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
                    const options = { 
                        content: document.querySelector('input[name="content"]:checked').value, 
                        format: document.querySelector('input[name="format"]:checked').value, 
@@ -2620,6 +2633,7 @@ canvas.addEventListener('mouseup', e => {
                        exportStats: document.getElementById('exportStatsCheckbox').checked, 
                        exportCursors: document.getElementById('exportCursorsCheckbox').checked, 
                        exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, 
+                       isWB: document.getElementById('exportWhiteBgCheckbox').checked
                     }; 
                    executeExport(options); exportModal.style.display = 'none'; 
                });
@@ -2673,47 +2687,75 @@ canvas.addEventListener('mouseup', e => {
         }
 
         function generateImageBlob(options) {
-             return new Promise((resolve, reject) => {
-                 const state = getActiveState(); if (!state) return reject('No active state');
-                 const tempCanvas = document.createElement('canvas'); 
-                 const tempCtx = tempCanvas.getContext('2d'); 
-                 const dpr = 2;
+ return new Promise((resolve, reject) => {
+ const state = getActiveState();
+ if (!state) return reject('No active state');
 
-                 const isFileExport = options.exportType === 'file';
-                 
-                 const w = (isFileExport && !options.isIEEE && options.pngWidth) ? options.pngWidth : canvas.clientWidth;
-                 const h = (isFileExport && !options.isIEEE && options.pngHeight) ? options.pngHeight : canvas.clientHeight;
-                 
-                 tempCanvas.width = w * dpr; 
-                 tempCanvas.height = h * dpr;
-                 tempCtx.scale(dpr, dpr);
+ const tempCanvas = document.createElement('canvas');
+ const tempCtx = tempCanvas.getContext('2d');
+ const dpr = 2;
 
-                 const isWB = isFileExport ? true : options.isWB;
-                 const { isIEEE } = options;
+ const isFileExport = options.exportType === 'file';
 
-                 const colors = {
-                     bg: isWB || isIEEE ? '#FFFFFF' : '#1e1e1e',
-                     grid: isWB || isIEEE ? '#CCCCCC' : '#333',
-                     text: isWB || isIEEE ? '#000000' : '#a0a0a0',
-                     axisBorder: isWB || isIEEE ? '#000000' : '#888',
-                     cursorTime: isWB || isIEEE ? '#555555' : '#f0ad4e',
-                     cursorVolt: isWB || isIEEE ? '#888888' : '#32f0ad',
-                     selection: '#00bcf2',
-                     statsBg: isWB || isIEEE ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
-                     bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500'],
-                     showGrid: displayOptions.showGrid 
-                 };
-                 
-                 const tempState = JSON.parse(JSON.stringify(state));
-                 Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
-                 const targetView = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
-                 tempState.view = targetView;
-                 
-                 drawToContext(tempCtx, tempState, colors, { width: w, height: h });
-                 
-                 tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
-                 });
-        }
+ const w = (isFileExport && !options.isIEEE && options.pngWidth) ? options.pngWidth : canvas.clientWidth;
+ const h = (isFileExport && !options.isIEEE && options.pngHeight) ? options.pngHeight : canvas.clientHeight;
+
+ tempCanvas.width = w * dpr;
+ tempCanvas.height = h * dpr;
+ tempCtx.scale(dpr, dpr);
+
+ const { isIEEE } = options;
+ const isWB = !!options.isWB; // honor explicit white background flag only when provided
+
+ // Build colors to reflect current UI theme/choices.
+ // Do NOT force B/W traces unless IEEE is requested.
+ const colors = {
+ bg: (isWB || isIEEE) ? '#FFFFFF' : '#1e1e1e',
+ grid: (isWB || isIEEE) ? '#CCCCCC' : '#333',
+ text: (isWB || isIEEE) ? '#000000' : '#a0a0a0',
+ axisBorder: (isWB || isIEEE) ? '#000000' : '#888',
+ cursorTime: (isWB || isIEEE) ? '#555555' : '#f0ad4e',
+ cursorVolt: (isWB || isIEEE) ? '#888888' : '#32f0ad',
+ selection: '#00bcf2',
+ statsBg: (isWB || isIEEE) ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+ // Only provide bwTraces when IEEE style is active; otherwise keep channel colors from state
+ bwTraces: isIEEE ? ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500'] : undefined,
+ showGrid: displayOptions.showGrid
+ };
+
+ // Clone state and apply export-specific visibility/options so PNG reflects UI toggles
+ const tempState = JSON.parse(JSON.stringify(state));
+ Object.keys(state.waveforms).forEach(chId => { tempState.waveforms[chId] = state.waveforms[chId]; });
+
+ // Respect selected content range (current view vs all data)
+ const targetView = options.content === 'all'
+ ? { startIndex: 0, endIndex: tempState.metadata.numPoints }
+ : tempState.view;
+ tempState.view = targetView;
+
+ // Respect annotations toggle from export modal in addition to UI visibility
+ tempState.annotationsVisible = !!options.exportAnnotations && !!state.annotationsVisible;
+
+ // Respect cursors toggle from export modal in addition to UI state
+ tempState.cursors = { ...tempState.cursors, enabled: !!options.exportCursors && !!state.cursors.enabled };
+
+ // Temporarily honor the "Measurements" checkbox for PNG rendering
+ const prevShowStats = displayOptions.showStats;
+ displayOptions.showStats = !!options.exportStats && !!prevShowStats;
+
+ try {
+ drawToContext(tempCtx, tempState, colors, { width: w, height: h });
+ } finally {
+ // Restore UI flag regardless of draw success
+ displayOptions.showStats = prevShowStats;
+ }
+
+ tempCanvas.toBlob(blob => {
+ if (blob) resolve(blob);
+ else reject('Canvas to Blob conversion failed');
+ }, 'image/png');
+ });
+ }
         
         function generateAndDownloadCSV(options) {
            const state = getActiveState();
@@ -2819,9 +2861,11 @@ canvas.addEventListener('mouseup', e => {
             if(visibleChannels.length > 0) {
                 const timeSpan = (view.endIndex - view.startIndex) * tempState.metadata.timePerPoint;
                 const tStart = (view.startIndex * tempState.metadata.timePerPoint) + (tempState.metadata.timeStart || 0);
-                for (let i = 0; i <= X_DIVS; i += 2) {
-                    const x = svgPlotArea.x + i / X_DIVS * svgPlotArea.width;
-                    const timeVal = tStart + i / X_DIVS * timeSpan;
+                                const minGapX = 45; // px
+                const stepX = Math.max(1, Math.ceil(minGapX / (svgPlotArea.width / X_DIVS)));
+                for (let i = 0; i <= X_DIVS; i += stepX) {
+                    const x = svgPlotArea.x + (i / X_DIVS) * svgPlotArea.width;
+                    const timeVal = tStart + (i / X_DIVS) * timeSpan;
                     svg += `<text x="${x}" y="${svgPlotArea.y + svgPlotArea.height + 15}" text-anchor="middle" dominant-baseline="hanging" font-weight="normal">${formatEng(timeVal, 's', 2, false)}</text>`;
                 }
                 svg += `<text x="${svgPlotArea.x + svgPlotArea.width / 2}" y="${figHeight - 5}" text-anchor="middle" font-weight="normal">Time (s)</text>`;
@@ -2829,9 +2873,11 @@ canvas.addEventListener('mouseup', e => {
                 const refChId = visibleChannels[0];
                 const refChInfo = tempState.channelInfo[refChId];
                 const vRange = refChInfo.vMax - refChInfo.vMin;
-                for (let j = 0; j <= Y_DIVS; j += 2) {
-                    const y = svgPlotArea.y + j / Y_DIVS * svgPlotArea.height;
-                    const v = refChInfo.vMax - j / Y_DIVS * vRange;
+                                const minGapY = 16; // px
+                const stepY = Math.max(1, Math.ceil(minGapY / (svgPlotArea.height / Y_DIVS)));
+                for (let j = 0; j <= Y_DIVS; j += stepY) {
+                    const y = svgPlotArea.y + (j / Y_DIVS) * svgPlotArea.height;
+                    const v = refChInfo.vMax - (j / Y_DIVS) * vRange;
                     svg += `<text x="${svgPlotArea.x - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-weight="normal">${formatEng(v, '', 2, false)}</text>`;
                 }
                 const yTitleX = 15;
