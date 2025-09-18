@@ -137,6 +137,9 @@
                 <div class="checkbox-item">
                     <label for="separateViewCheckbox"><input type="checkbox" id="separateViewCheckbox"> Separate Diagrams</label>
                 </div>
+                <div class="checkbox-item">
+                    <label for="showGridCheckbox"><input type="checkbox" id="showGridCheckbox" checked> Show Grid</label>
+                </div>
             </div>
              <div class="control-panel" id="cursorPanel" style="display: none;">
                 <div class="panel-title">Cursor Measurements</div>
@@ -233,10 +236,19 @@
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportStatsCheckbox" checked> Measurements</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportCursorsCheckbox" checked> Cursors</label>
                       <label style="margin-right: 15px;"><input type="checkbox" id="exportAnnotationsCheckbox" checked> Annotations</label>
-                      <label style="margin-right: 15px;"><input type="checkbox" id="wbExportCheckbox"> White Background</label>
-                      <br><br>
                       <label><input type="checkbox" id="exportTableBottomCheckbox"> Place measurements at bottom</label>
                   </div>
+                  <div id="png-options" style="display: none;">
+                        <h3 style="margin-bottom: 8px; margin-top: 15px;">Image Dimensions</h3>
+                        <div class="control-item" style="margin-top: 5px; margin-bottom: 5px;">
+                            <label for="pngWidth" class="control-label">Width (px):</label>
+                            <input type="number" id="pngWidth" value="800" step="10" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                        </div>
+                        <div class="control-item">
+                            <label for="pngHeight" class="control-label">Height (px):</label>
+                            <input type="number" id="pngHeight" value="600" step="10" class="control-input" style="pointer-events: auto; font-family: 'Segoe UI', sans-serif;">
+                        </div>
+                   </div>
                   <div>
                       <label><input type="checkbox" id="ieeeStyleCheckbox"> <b>Use IEEE Style (Publication)</b></label>
                       <div class="ieee-options">
@@ -531,7 +543,7 @@
         let panStart = { x: 0, y: 0, viewStart: 0, viewEnd: 0, vRanges: {} };
         let dragStart = { x: 0, y: 0 }, dragEnd = { x: 0, y: 0 };
         let activeInteraction = { type: null, index: -1, handle: null, channel: null };
-        let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false, separateView: false };
+        let displayOptions = { showStats: true, discreteZoom: false, relativeTime: false, separateView: false, showGrid: true };
         let textAnnotationMode = false;
         let pointAnnotationMode = false;
         let lastMousePos = { x: 0, y: 0 };
@@ -674,7 +686,7 @@
             return { x: PADDING.left, y: PADDING.top, width: width - PADDING.left - PADDING.right, height: height - PADDING.top - PADDING.bottom };
         }
         function screenToData(screenPos, view, state, channelId, plotArea) {
-            const { width, height } = canvas.getBoundingClientRect();
+            const { width, height } = dimensions || canvas.getBoundingClientRect();
             const p = plotArea || getPlotArea(width, height, state);
             if (!view || !state || !p.width || !p.height) return {time: 0, voltage: 0};
             
@@ -689,7 +701,7 @@
             return { time: time + timeOffset, voltage };
         }
         function dataToScreen(dataPos, view, state, channelId, plotArea) {
-            const { width, height } = canvas.getBoundingClientRect();
+            const { width, height } = dimensions || canvas.getBoundingClientRect();
             const p = plotArea || getPlotArea(width, height, state);
             if (!view || !state || !channelId || !state.channelInfo[channelId] || !p.width || !p.height) return {x: 0, y: 0};
             
@@ -719,7 +731,8 @@
                     axisBorder: '#888',
                     cursorTime: '#f0ad4e',
                     cursorVolt: '#32f0ad',
-                    selection: '#00bcf2'
+                    selection: '#00bcf2',
+                    showGrid: displayOptions.showGrid
                 };
                 drawToContext(ctx, state, colors);
             });
@@ -732,8 +745,8 @@
                      r2.y > r1.y + r1.h + margin ||
                      r2.y + r2.h < r1.y - margin);
         }
-                function drawToContext(context, state, colors) {
-                const { width, height } = canvas.getBoundingClientRect();
+                function drawToContext(context, state, colors, dimensions = null) {
+                const { width, height } = dimensions || canvas.getBoundingClientRect();
                 context.fillStyle = colors.bg;
                 context.fillRect(0, 0, width, height);
                 
@@ -823,7 +836,7 @@
             const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
             if (w < 5 || h < 5) return;
 
-            const { width, height } = canvas.getBoundingClientRect();
+            const { width, height } = dimensions || canvas.getBoundingClientRect();
             let p_area = null;
             const dragRefCh = state.annotationChannel || getVisibleChannels(state)[0];
             const visibleChannels = getVisibleChannels(state);
@@ -910,7 +923,7 @@
             const d = v / 10**(i * 3); 
             return (s + d.toPrecision(p) + (k[i + 5] || '') + (includeUnit && u ? ` ${u}` : '')).trim(); 
         }
-        function drawGrid(context, p, colors, isSeparate=false, isLast=true){context.strokeStyle=colors.grid;context.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;context.beginPath();context.moveTo(x,p.y);context.lineTo(x,p.y+p.height);context.stroke()} const yDivs = (isSeparate || (displayOptions.separateView && !getActiveState()?.isOverlap)) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;context.beginPath();context.moveTo(p.x,y);context.lineTo(p.x+p.width,y);context.stroke()}}
+        function drawGrid(context, p, colors, isSeparate=false, isLast=true){ if (!colors.showGrid) return; context.strokeStyle=colors.grid;context.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;context.beginPath();context.moveTo(x,p.y);context.lineTo(x,p.y+p.height);context.stroke()} const yDivs = (isSeparate || (displayOptions.separateView && !getActiveState()?.isOverlap)) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;context.beginPath();context.moveTo(p.x,y);context.lineTo(p.x+p.width,y);context.stroke()}}
         
         function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
             context.fillStyle=colors.text; 
@@ -2102,7 +2115,7 @@ canvas.addEventListener('mouseup', e => {
                     const annotationCh = state.annotationChannel || getVisibleChannels(state)[0];
                     if (annotationCh) {
                         let plotArea = null;
-                        const { width, height } = canvas.getBoundingClientRect();
+                        const { width, height } = dimensions || canvas.getBoundingClientRect();
                         const visibleChannels = getVisibleChannels(state);
 
                         if (displayOptions.separateView && visibleChannels.length > 0 && !state.isOverlap) {
@@ -2171,7 +2184,7 @@ canvas.addEventListener('mouseup', e => {
         function getChannelFromMousePosition(pos, state) {
             if (!state) return null;
             const { x: mouseX, y: mouseY } = pos;
-            const { width, height } = canvas.getBoundingClientRect();
+            const { width, height } = dimensions || canvas.getBoundingClientRect();
             const visibleChannels = getVisibleChannels(state);
             
             if (displayOptions.separateView && !state.isOverlap) {
@@ -2216,7 +2229,7 @@ canvas.addEventListener('mouseup', e => {
                     const visibleChannels = getVisibleChannels(state);
                     const chIndex = visibleChannels.indexOf(hoveredChannel);
                     if (chIndex === -1) return;
-                    const { width, height } = canvas.getBoundingClientRect();
+                    const { width, height } = dimensions || canvas.getBoundingClientRect();
                     const PADDING = getDynamicPadding(state);
                     const totalPlotHeight = height - PADDING.top - PADDING.bottom;
                     const totalGapHeight = (visibleChannels.length > 1) ? (visibleChannels.length - 1) * SEPARATE_VIEW_GAP : 0;
@@ -2300,6 +2313,7 @@ canvas.addEventListener('mouseup', e => {
         document.getElementById('discreteZoomCheckbox').addEventListener('change', e => { displayOptions.discreteZoom = e.target.checked; });
         document.getElementById('relativeTimeCheckbox').addEventListener('change', e => { displayOptions.relativeTime = e.target.checked; draw(); });
         document.getElementById('separateViewCheckbox').addEventListener('change', e => { displayOptions.separateView = e.target.checked; resizeCanvas(); });
+        document.getElementById('showGridCheckbox').addEventListener('change', e => { displayOptions.showGrid = e.target.checked; draw(); });
         document.getElementById('createOverlapBtn').addEventListener('click', createOverlapTab);
         
         document.getElementById('timeScale').addEventListener('change', e => { 
@@ -2575,8 +2589,38 @@ canvas.addEventListener('mouseup', e => {
                        m.addEventListener('click', e => { if(e.target===m)m.style.display='none'; });
                    }
                });
+                              const formatRadios = document.querySelectorAll('input[name="format"]');
+               const ieeeCheckbox = document.getElementById('ieeeStyleCheckbox');
+               const pngOptions = document.getElementById('png-options');
+
+               function togglePngOptions() {
+                    const format = document.querySelector('input[name="format"]:checked').value;
+                    const isIEEE = ieeeCheckbox.checked;
+                    if ((format === 'png' || format === 'svg') && !isIEEE) {
+                        pngOptions.style.display = 'block';
+                    } else {
+                        pngOptions.style.display = 'none';
+                    }
+               }
+
+               formatRadios.forEach(radio => radio.addEventListener('change', togglePngOptions));
+               ieeeCheckbox.addEventListener('change', togglePngOptions);
+               togglePngOptions(); // initial check
+
                document.getElementById('exportConfirmBtn').addEventListener('click', () => { 
-                   const options = { content: document.querySelector('input[name="content"]:checked').value, format: document.querySelector('input[name="format"]:checked').value, isIEEE: document.getElementById('ieeeStyleCheckbox').checked, isWB: document.getElementById('wbExportCheckbox').checked, tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), exportStats: document.getElementById('exportStatsCheckbox').checked, exportCursors: document.getElementById('exportCursorsCheckbox').checked, exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, }; 
+                   const options = { 
+                       content: document.querySelector('input[name="content"]:checked').value, 
+                       format: document.querySelector('input[name="format"]:checked').value, 
+                       isIEEE: document.getElementById('ieeeStyleCheckbox').checked, 
+                       tableAtBottom: document.getElementById('exportTableBottomCheckbox').checked, 
+                       ieeeWidth: parseFloat(document.getElementById('ieeeWidth').value), 
+                       ieeeHeight: parseFloat(document.getElementById('ieeeHeight').value), 
+                       pngWidth: parseInt(document.getElementById('pngWidth').value),
+                       pngHeight: parseInt(document.getElementById('pngHeight').value),
+                       exportStats: document.getElementById('exportStatsCheckbox').checked, 
+                       exportCursors: document.getElementById('exportCursorsCheckbox').checked, 
+                       exportAnnotations: document.getElementById('exportAnnotationsCheckbox').checked, 
+                    }; 
                    executeExport(options); exportModal.style.display = 'none'; 
                });
         }
@@ -2584,7 +2628,7 @@ canvas.addEventListener('mouseup', e => {
                const state = getActiveState(); if (!state) return;
                const isWB = document.getElementById('wbCopyCheckbox').checked;
                try {
-                   const blob = await generateImageBlob({ content: 'current', format: 'png', isIEEE: false, isWB: isWB, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
+                   const blob = await generateImageBlob({ exportType: 'clipboard', content: 'current', format: 'png', isIEEE: false, isWB: isWB, exportStats: true, exportCursors: state.cursors.enabled, exportAnnotations: true });
                    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
                    statusText.textContent = 'Copied to clipboard!';
                    setTimeout(() => { if (getActiveState()) statusText.textContent = `Loaded: ${getActiveState().fileName}`; }, 2000);
@@ -2613,7 +2657,7 @@ canvas.addEventListener('mouseup', e => {
                     });
                     downloadBlob(blob, newFilename);
                 } else { // PNG export
-                    const blob = await generateImageBlob(options);
+                    const blob = await generateImageBlob({...options, exportType: 'file'});
                     downloadBlob(blob, newFilename);
                 }
             } catch (err) {
@@ -2631,12 +2675,22 @@ canvas.addEventListener('mouseup', e => {
         function generateImageBlob(options) {
              return new Promise((resolve, reject) => {
                  const state = getActiveState(); if (!state) return reject('No active state');
-                 const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); const dpr = 2;
-                 const w = canvas.clientWidth, h = canvas.clientHeight;
-                 tempCanvas.width = w * dpr; tempCanvas.height = h * dpr;
+                 const tempCanvas = document.createElement('canvas'); 
+                 const tempCtx = tempCanvas.getContext('2d'); 
+                 const dpr = 2;
+
+                 const isFileExport = options.exportType === 'file';
+                 
+                 const w = (isFileExport && !options.isIEEE && options.pngWidth) ? options.pngWidth : canvas.clientWidth;
+                 const h = (isFileExport && !options.isIEEE && options.pngHeight) ? options.pngHeight : canvas.clientHeight;
+                 
+                 tempCanvas.width = w * dpr; 
+                 tempCanvas.height = h * dpr;
                  tempCtx.scale(dpr, dpr);
 
-                 const { isWB, isIEEE } = options;
+                 const isWB = isFileExport ? true : options.isWB;
+                 const { isIEEE } = options;
+
                  const colors = {
                      bg: isWB || isIEEE ? '#FFFFFF' : '#1e1e1e',
                      grid: isWB || isIEEE ? '#CCCCCC' : '#333',
@@ -2646,7 +2700,8 @@ canvas.addEventListener('mouseup', e => {
                      cursorVolt: isWB || isIEEE ? '#888888' : '#32f0ad',
                      selection: '#00bcf2',
                      statsBg: isWB || isIEEE ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
-                     bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500']
+                     bwTraces: ['#000000', '#0000FF', '#FF0000', '#008000', '#A020F0', '#FFA500'],
+                     showGrid: displayOptions.showGrid 
                  };
                  
                  const tempState = JSON.parse(JSON.stringify(state));
@@ -2654,7 +2709,7 @@ canvas.addEventListener('mouseup', e => {
                  const targetView = options.content === 'all' ? {startIndex: 0, endIndex: tempState.metadata.numPoints } : tempState.view;
                  tempState.view = targetView;
                  
-                 drawToContext(tempCtx, tempState, colors);
+                 drawToContext(tempCtx, tempState, colors, { width: w, height: h });
                  
                  tempCanvas.toBlob(blob => { if (blob) resolve(blob); else reject('Canvas to Blob conversion failed'); }, 'image/png');
                  });
