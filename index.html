@@ -687,30 +687,32 @@
             return { x: PADDING.left, y: PADDING.top, width: width - PADDING.left - PADDING.right, height: height - PADDING.top - PADDING.bottom };
         }
         function screenToData(screenPos, view, state, channelId, plotArea) {
-            const { width, height } = dimensions || canvas.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width, height = rect.height;
             const p = plotArea || getPlotArea(width, height, state);
-            if (!view || !state || !p.width || !p.height) return {time: 0, voltage: 0};
-            
+            if (!view || !state || !p.width || !p.height) return { time: 0, voltage: 0 };
+
             const targetChannelId = channelId || (getVisibleChannels(state)[0]);
             let voltage = 0;
             if (targetChannelId && state.channelInfo[targetChannelId]) {
-                 const chInfo = state.channelInfo[targetChannelId];
-                 voltage = chInfo.vMax - (screenPos.y - p.y) * (chInfo.vMax - chInfo.vMin) / p.height;
+                const chInfo = state.channelInfo[targetChannelId];
+                voltage = chInfo.vMax - (screenPos.y - p.y) * (chInfo.vMax - chInfo.vMin) / p.height;
             }
             const timeOffset = state.metadata.timeStart || 0;
             const time = (screenPos.x - p.x) * ((view.endIndex - view.startIndex) * state.metadata.timePerPoint) / p.width + (view.startIndex * state.metadata.timePerPoint);
             return { time: time + timeOffset, voltage };
         }
         function dataToScreen(dataPos, view, state, channelId, plotArea) {
-            const { width, height } = dimensions || canvas.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width, height = rect.height;
             const p = plotArea || getPlotArea(width, height, state);
-            if (!view || !state || !channelId || !state.channelInfo[channelId] || !p.width || !p.height) return {x: 0, y: 0};
-            
+            if (!view || !state || !channelId || !state.channelInfo[channelId] || !p.width || !p.height) return { x: 0, y: 0 };
+
             const chInfo = state.channelInfo[channelId];
             const viewTimeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
             const viewVoltSpan = chInfo.vMax - chInfo.vMin;
-            if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return {x: p.x, y: p.y + p.height / 2};
-            
+            if (viewTimeSpan <= 0 || viewVoltSpan <= 0) return { x: p.x, y: p.y + p.height / 2 };
+
             const timeOffset = state.metadata.timeStart || 0;
             const viewStartTime = (view.startIndex * state.metadata.timePerPoint);
 
@@ -837,7 +839,8 @@
             const w = Math.abs(dragStart.x - dragEnd.x), h = Math.abs(dragStart.y - dragEnd.y);
             if (w < 5 || h < 5) return;
 
-            const { width, height } = dimensions || canvas.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width, height = rect.height;
             let p_area = null;
             const dragRefCh = state.annotationChannel || getVisibleChannels(state)[0];
             const visibleChannels = getVisibleChannels(state);
@@ -851,7 +854,7 @@
                     const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
                     const relativeY = dragStart.y - PADDING.top;
                     const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
-                    
+
                     if (blockIndex < visibleChannels.length) {
                         p_area = {
                             x: PADDING.left,
@@ -870,10 +873,10 @@
                 const { time: t_start, voltage: v_start } = screenToData({ x: dragStart.x, y: dragStart.y }, state.view, state, dragRefCh, p_area);
                 const { time: t_end, voltage: v_end } = screenToData({ x: dragEnd.x, y: dragEnd.y }, state.view, state, dragRefCh, p_area);
                 const dt = Math.abs(t_end - t_start), dV = Math.abs(v_end - v_start), freq = dt > 0 ? 1 / dt : 0;
-                
+
                 const bgColor = hexToRgba(chInfo.color, 0.2), textColor = chInfo.color;
                 const text1 = `Δt: ${formatEng(dt, 's')}`, text2 = `1/Δt: ${formatEng(freq, 'Hz')}`, text3 = `ΔV: ${formatEng(dV, chInfo.units)}`;
-                
+
                 ctx.font = '13px Segoe UI';
                 const boxWidth = Math.max(ctx.measureText(text1).width, ctx.measureText(text2).width, ctx.measureText(text3).width) + 20;
                 const boxHeight = 70;
@@ -884,7 +887,7 @@
                 if (boxY + boxHeight > height) { boxY = height - boxHeight - 5; }
 
                 ctx.fillStyle = bgColor; ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-                ctx.fillStyle = textColor; ctx.font = ` 13px Segoe UI`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                ctx.fillStyle = textColor; ctx.font = '13px Segoe UI'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
                 ctx.fillText(text1, boxX + 10, boxY + 5);
                 ctx.fillText(text2, boxX + 10, boxY + 25);
                 ctx.fillText(text3, boxX + 10, boxY + 45);
@@ -926,45 +929,34 @@
         }
         function drawGrid(context, p, colors, isSeparate=false, isLast=true){ if (!colors.showGrid) return; context.strokeStyle=colors.grid;context.lineWidth=1;for(let i=0;i<=X_DIVS;i++){const x=p.x+i/X_DIVS*p.width;context.beginPath();context.moveTo(x,p.y);context.lineTo(x,p.y+p.height);context.stroke()} const yDivs = (isSeparate || (displayOptions.separateView && !getActiveState()?.isOverlap)) ? Y_DIVS_SEPARATE : Y_DIVS; for(let i=0;i<=yDivs;i++){const y=p.y+i/yDivs*p.height;if(isSeparate && i===yDivs && !isLast) continue;context.beginPath();context.moveTo(p.x,y);context.lineTo(p.x+p.width,y);context.stroke()}}
         
-                function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
-            context.fillStyle = colors.text;
-            context.font = '14px Segoe UI';
-            context.textAlign = 'center';
-            context.textBaseline = 'top';
-
-            // Dynamic tick density to avoid overlap
-            const MIN_GAP_X = 45; // px between adjacent X labels
-            const MIN_GAP_Y = 16; // px between adjacent Y labels
-
-            if (view && state) {
+        function drawAxisLabels(context, p, view, state, separateChannelId = null, colors){
+            context.fillStyle=colors.text; 
+            context.font='14px Segoe UI'; 
+            context.textAlign='center';
+            context.textBaseline='top';
+            if (view && state) { 
                 const timeOffset = state.metadata.timeStart || 0;
                 const timeSpan = (view.endIndex - view.startIndex) * state.metadata.timePerPoint;
-                if (timeSpan > 0) {
+                if(timeSpan > 0){
                     const tStart = (view.startIndex * state.metadata.timePerPoint) + timeOffset;
-                    // Compute step to ensure minimum pixel gap. When rendering to the export canvas, context !== ctx
-                    const baseStepX = Math.max(1, Math.ceil((MIN_GAP_X) / (p.width / X_DIVS)));
-                    const isLastSeparateView = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
-                    for (let i = 0; i <= X_DIVS; i++) {
-                        if (i % baseStepX !== 0) continue;
-                        const x = p.x + (i / X_DIVS) * p.width;
-                        const timeVal = displayOptions.relativeTime ? ((i / X_DIVS) * timeSpan) : (tStart + (i / X_DIVS) * timeSpan);
+                    for(let i=0; i<=X_DIVS; i++){
+                        const x = p.x + i/X_DIVS*p.width;
+                        const timeVal = displayOptions.relativeTime ? (i/X_DIVS*timeSpan) : (tStart + i/X_DIVS*timeSpan);
+                        const isLastSeparateView = separateChannelId && getVisibleChannels(state).slice(-1)[0] === separateChannelId;
                         if (!displayOptions.separateView || state.isOverlap || isLastSeparateView) {
-                            context.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
+                             context.fillText(formatEng(timeVal, 's', 3, false), x, p.y + p.height + 10);
                         }
                     }
                 }
             }
-
             const isLastSeparateViewForTitle = separateChannelId && getVisibleChannels(state)?.slice(-1)[0] === separateChannelId;
             if (!displayOptions.separateView || state?.isOverlap || isLastSeparateViewForTitle) {
-                context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
+                 context.fillText('Time (s)', p.x + p.width / 2, p.y + p.height + 35);
             }
 
             if (state) {
                 const visibleChannels = separateChannelId ? [separateChannelId] : getVisibleChannels(state);
                 const yDivs = separateChannelId ? Y_DIVS_SEPARATE : Y_DIVS;
-                const baseStepY = Math.max(1, Math.ceil((MIN_GAP_Y) / (p.height / yDivs)));
-
                 visibleChannels.forEach((chId, i) => {
                     const chInfo = state.channelInfo[chId];
                     if (!chInfo) return;
@@ -975,10 +967,9 @@
                     context.textAlign = 'right';
                     context.textBaseline = 'middle';
                     if (vRange > 0) {
-                        for (let j = 0; j <= yDivs; j++) {
-                            if (j % baseStepY !== 0) continue;
-                            const y = p.y + (j / yDivs) * p.height;
-                            const v = chInfo.vMax - (j / yDivs) * vRange;
+                        for(let j=0; j<=yDivs; j++){
+                            const y = p.y + j/yDivs*p.height;
+                            const v = chInfo.vMax - j/yDivs*vRange;
                             context.fillText(formatEng(v, '', 3, false), axisX, y);
                         }
                     }
@@ -2128,7 +2119,8 @@ canvas.addEventListener('mouseup', e => {
                     const annotationCh = state.annotationChannel || getVisibleChannels(state)[0];
                     if (annotationCh) {
                         let plotArea = null;
-                        const { width, height } = dimensions || canvas.getBoundingClientRect();
+                        const rect = canvas.getBoundingClientRect();
+                        const width = rect.width, height = rect.height;
                         const visibleChannels = getVisibleChannels(state);
 
                         if (displayOptions.separateView && visibleChannels.length > 0 && !state.isOverlap) {
@@ -2140,7 +2132,7 @@ canvas.addEventListener('mouseup', e => {
                                 const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
                                 const relativeY = dragStart.y - PADDING.top;
                                 const blockIndex = Math.max(0, Math.floor(relativeY / blockHeight));
-                                
+
                                 if (blockIndex < visibleChannels.length) {
                                     plotArea = {
                                         x: PADDING.left,
@@ -2197,9 +2189,10 @@ canvas.addEventListener('mouseup', e => {
         function getChannelFromMousePosition(pos, state) {
             if (!state) return null;
             const { x: mouseX, y: mouseY } = pos;
-            const { width, height } = dimensions || canvas.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width, height = rect.height;
             const visibleChannels = getVisibleChannels(state);
-            
+
             if (displayOptions.separateView && !state.isOverlap) {
                 if (mouseY < PADDING_STATIC.top || mouseY > height - PADDING_STATIC.bottom || visibleChannels.length === 0) return null;
                 const PADDING = getDynamicPadding(state);
@@ -2210,7 +2203,7 @@ canvas.addEventListener('mouseup', e => {
 
                 const blockHeight = individualPlotHeight + SEPARATE_VIEW_GAP;
                 const relativeY = mouseY - PADDING.top;
-                
+
                 if (relativeY > 0 && (relativeY % blockHeight) > individualPlotHeight) return null;
 
                 const blockIndex = Math.floor(relativeY / blockHeight);
@@ -2861,11 +2854,9 @@ canvas.addEventListener('mouseup', e => {
             if(visibleChannels.length > 0) {
                 const timeSpan = (view.endIndex - view.startIndex) * tempState.metadata.timePerPoint;
                 const tStart = (view.startIndex * tempState.metadata.timePerPoint) + (tempState.metadata.timeStart || 0);
-                                const minGapX = 45; // px
-                const stepX = Math.max(1, Math.ceil(minGapX / (svgPlotArea.width / X_DIVS)));
-                for (let i = 0; i <= X_DIVS; i += stepX) {
-                    const x = svgPlotArea.x + (i / X_DIVS) * svgPlotArea.width;
-                    const timeVal = tStart + (i / X_DIVS) * timeSpan;
+                for (let i = 0; i <= X_DIVS; i += 2) {
+                    const x = svgPlotArea.x + i / X_DIVS * svgPlotArea.width;
+                    const timeVal = tStart + i / X_DIVS * timeSpan;
                     svg += `<text x="${x}" y="${svgPlotArea.y + svgPlotArea.height + 15}" text-anchor="middle" dominant-baseline="hanging" font-weight="normal">${formatEng(timeVal, 's', 2, false)}</text>`;
                 }
                 svg += `<text x="${svgPlotArea.x + svgPlotArea.width / 2}" y="${figHeight - 5}" text-anchor="middle" font-weight="normal">Time (s)</text>`;
@@ -2873,11 +2864,9 @@ canvas.addEventListener('mouseup', e => {
                 const refChId = visibleChannels[0];
                 const refChInfo = tempState.channelInfo[refChId];
                 const vRange = refChInfo.vMax - refChInfo.vMin;
-                                const minGapY = 16; // px
-                const stepY = Math.max(1, Math.ceil(minGapY / (svgPlotArea.height / Y_DIVS)));
-                for (let j = 0; j <= Y_DIVS; j += stepY) {
-                    const y = svgPlotArea.y + (j / Y_DIVS) * svgPlotArea.height;
-                    const v = refChInfo.vMax - (j / Y_DIVS) * vRange;
+                for (let j = 0; j <= Y_DIVS; j += 2) {
+                    const y = svgPlotArea.y + j / Y_DIVS * svgPlotArea.height;
+                    const v = refChInfo.vMax - j / Y_DIVS * vRange;
                     svg += `<text x="${svgPlotArea.x - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-weight="normal">${formatEng(v, '', 2, false)}</text>`;
                 }
                 const yTitleX = 15;
